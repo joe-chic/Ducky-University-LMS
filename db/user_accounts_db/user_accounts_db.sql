@@ -18,6 +18,7 @@ CREATE TABLE users(
 	user_email sys_email NOT NULL,
 	user_password VARCHAR(255) NOT NULL,
 	user_state account_state NOT NULL,
+	last_login TIMESTAMPTZ NOT NULL,
 	created_at TIMESTAMPTZ DEFAULT NOW(),
 	created_by BIGINT NOT NULL,
 	latest_modified_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
