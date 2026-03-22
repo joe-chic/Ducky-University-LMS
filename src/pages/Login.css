@@ -1,0 +1,115 @@
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+.login-bg {
+  width: 100vw;
+  height: 100vh;
+  background: linear-gradient(rgba(0,0,0,0.5), rgba(0,0,0,0.5)),
+    url("https://images.unsplash.com/photo-1562774053-701939374585?w=1600") center/cover no-repeat;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.login-card {
+  background: white;
+  border-radius: 20px;
+  padding: 40px;
+  width: 420px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.login-logo {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+}
+
+.login-logo-top {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.logo-ducky {
+  color: #f5c518;
+  font-size: 24px;
+  font-weight: bold;
+}
+
+.login-logo-text {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.2;
+}
+
+.logo-university {
+  color: #555;
+  font-size: 14px;
+  font-weight: normal;
+}
+.login-title {
+  text-align: center;
+  font-size: 24px;
+  font-weight: bold;
+  margin-top: 8px;
+}
+
+label {
+  font-size: 16px;
+  color: #333;
+  text-align: center;
+}
+
+.login-input {
+  width: 100%;
+  padding: 14px;
+  border: 1.5px solid #ccc;
+  border-radius: 8px;
+  font-size: 16px;
+  outline: none;
+}
+
+.login-input:focus {
+  border-color: #f5c518;
+}
+
+.login-recover {
+  text-align: center;
+  color: #f5c518;
+  font-size: 14px;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.login-buttons {
+  display: flex;
+  justify-content: center;
+  gap: 16px;
+  margin-top: 8px;
+}
+
+.btn-dark {
+  background-color: #1e1e2e;
+  color: white;
+  border: none;
+  padding: 12px 24px;
+  border-radius: 8px;
+  font-size: 15px;
+  cursor: pointer;
+}
+
+.btn-dark:hover {
+  background-color: #333;
+}
+
+.duck-icon {
+  width: 50px;
+  height: 50px;
+}
