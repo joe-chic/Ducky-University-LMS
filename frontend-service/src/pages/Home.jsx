@@ -1,14 +1,42 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import "./Home.css";
 import landingImage from "../assets/images/landingImage.png";
 import duckIcon from "../assets/icons/duckIcon.svg";
 import duckIconWhite from "../assets/icons/duckIconWhite.svg";
-import { libros } from "../data/Libros.js";
 import { useNavigate } from "react-router-dom";
+import { bffGet, getToken } from "../api/bff";
 
 function Home() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const navigate = useNavigate();
+  const [libros, setLibros] = useState([]);
+  const [busqueda, setBusqueda] = useState("");
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    const token = getToken();
+    let cancelled = false;
+
+    async function run() {
+      setLoading(true);
+      try {
+        const data = await bffGet("/api/books", { token, params: { search: busqueda, pageSize: 50 } });
+        if (!cancelled) setLibros(data.items || []);
+      } catch (err) {
+        // eslint-disable-next-line no-console
+        console.error(err);
+        if (!cancelled) setLibros([]);
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    }
+
+    const t = setTimeout(run, 300);
+    return () => {
+      cancelled = true;
+      clearTimeout(t);
+    };
+  }, [busqueda]);
 
   return (
     <div className="home-container">
@@ -28,7 +56,7 @@ function Home() {
             <div className="sidebar-menu">
               <div className="sidebar-item active">Inicio</div>
               <div className="sidebar-item" onClick={() => navigate("/usuarios")}>Usuarios</div>
-              <div className="sidebar-item">Libros</div>
+              <div className="sidebar-item" onClick={() => navigate("/libros")}>Libros</div>
             </div>
           </>
         ) : (
@@ -72,11 +100,23 @@ function Home() {
         {/* Libros */}
         <h2 className="section-title">Nuevo libros disponibles</h2>
 
+        <div className="books-search">
+          <input
+            className="search-input"
+            value={busqueda}
+            onChange={(e) => setBusqueda(e.target.value)}
+            placeholder="Buscar libros ..."
+          />
+        </div>
+
         <div className="books-grid">
-        {libros.map((libro) => (
+        {loading ? (
+          <div> Cargando...</div>
+        ) : (
+          libros.map((libro) => (
             <div className="book-card" key={libro.id}>
             <div className="book-card-top">
-                <span className="badge-disponible">Disponible</span>
+              <span className="badge-disponible">{libro.disponible ? "Disponible" : "No disponible"}</span>
             </div>
             <div className="book-info">
                 <div className="book-cover">📚</div>
@@ -92,7 +132,8 @@ function Home() {
                 <button className="btn-action">✕ Deshabilitar</button>
             </div>
             </div>
-        ))}
+          ))
+        )}
         </div>
 
         <h2 className="ver-mas">Ver más ↓</h2>

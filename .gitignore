@@ -2,6 +2,10 @@
 
 # dependencies
 frontend-service/node_modules/
+BFF-service/node_modules/
+library-microservice/node_modules/
+users-microservice/node_modules/
+db/*.csv
 /.pnp
 .pnp.js
 

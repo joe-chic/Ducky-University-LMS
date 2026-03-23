@@ -7,7 +7,7 @@ CREATE DOMAIN sys_email AS VARCHAR(255)
     VALUE ~* '^(?!.*\.\..*)(?!\..*)[A-Za-z0-9\.\_\%\+\-]+@(?!^\-.*$)(?!^.*\-$)(?!^..\-\-*$)([A-Za-z0-9\-]){1,253}.([a-z0-9\-]){2,63}$'
   );
 
-CREATE DOMAIN sys_phone AS VARCHAR(15)
+CREATE DOMAIN generic_phone AS VARCHAR(15)
   CHECK(VALUE ~ '^\+?([\d\s-]){9,15}$');
 
 -- Enums
@@ -24,7 +24,7 @@ CREATE TABLE employees(
   father_lastname VARCHAR(100) NOT NULL,
   mother_lastname VARCHAR(100),
   employee_email sys_email,
-  employee_phone sys_phone,
+  employee_phone generic_phone,
   employee_status employee_status NOT NULL,
   RFC VARCHAR(13) NOT NULL UNIQUE CHECK(RFC ~ '^[A-Z0-9]{12,13}$'),
   CLABE VARCHAR(18) NOT NULL UNIQUE CHECK(CLABE ~ '^[A-Z0-9]{18}$'),

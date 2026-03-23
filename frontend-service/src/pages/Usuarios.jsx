@@ -1,9 +1,8 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import "./Usuarios.css";
 import duckIcon from "../assets/icons/duckIcon.svg";
 import duckIconWhite from "../assets/icons/duckIconWhite.svg";
-import { usuarios } from "../data/Usuarios";
 import userIcon from "../assets/icons/userIcon.svg";
 import userIconNav from "../assets/icons/userIconNav.svg";
 import notificationIcon from "../assets/icons/notificationIcon.svg";
@@ -11,6 +10,7 @@ import searchIcon from "../assets/icons/searchIcon.svg";
 import buttonCirculo from "../assets/icons/Button-circulo.svg";
 import updateIcon from "../assets/icons/updateIcon.svg";
 import { permisosIniciales } from "../data/Permisos";
+import { bffDelete, bffGet, bffPost, bffPut, getToken } from "../api/bff";
 
 function Usuarios() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -19,6 +19,8 @@ function Usuarios() {
   const [permisosOriginal] = useState(permisosIniciales);
   const [paginaActual, setPaginaActual] = useState(1);
   const registrosPorPagina = 10;
+  const [usuarios, setUsuarios] = useState([]);
+  const [totalUsuarios, setTotalUsuarios] = useState(0);
 
   // TODO: reemplazar permisosIniciales con fetch a BD cuando esté lista
   // Ejemplo: useEffect(() => { fetch('/api/permisos').then(r => r.json()).then(setPermisos) }, []);
@@ -27,6 +29,7 @@ function Usuarios() {
   const [permisosModificados, setPermisosModificados] = useState({});
   const [seccionesAbiertas, setSeccionesAbiertas] = useState({});
   const [modalAbierto, setModalAbierto] = useState(false);
+  const [usuarioEditando, setUsuarioEditando] = useState(null);
   const [nuevoUsuario, setNuevoUsuario] = useState({
     nombre: "",
     rol: "",
@@ -41,17 +44,36 @@ function Usuarios() {
     foto: null // TODO: reemplazar con foto de BD
   };
 
-  const usuariosFiltrados = usuarios.filter((u) =>
-    u.nombre.toLowerCase().includes(busqueda.toLowerCase()) ||
-    u.rol.toLowerCase().includes(busqueda.toLowerCase())
-    );
+  const usuariosPaginados = usuarios;
+  const totalPaginas = Math.ceil(totalUsuarios / registrosPorPagina);
 
-    const totalPaginas = Math.ceil(usuariosFiltrados.length / registrosPorPagina);
+  useEffect(() => {
+    let cancelled = false;
 
-    const usuariosPaginados = usuariosFiltrados.slice(
-    (paginaActual - 1) * registrosPorPagina,
-    paginaActual * registrosPorPagina
-    );
+    async function run() {
+      const token = getToken();
+      try {
+        const data = await bffGet("/api/users", {
+          token,
+          params: { search: busqueda, page: paginaActual, pageSize: registrosPorPagina },
+        });
+        if (cancelled) return;
+        setUsuarios(data.items || []);
+        setTotalUsuarios(data.total || 0);
+      } catch (err) {
+        // eslint-disable-next-line no-console
+        console.error(err);
+        if (cancelled) return;
+        setUsuarios([]);
+        setTotalUsuarios(0);
+      }
+    }
+
+    run();
+    return () => {
+      cancelled = true;
+    };
+  }, [busqueda, paginaActual]);
 
   function toggleRol(rol) {
     setRolesAbiertos(prev => ({ ...prev, [rol]: !prev[rol] }));
@@ -200,12 +222,36 @@ function Usuarios() {
                     <p className="usuario-telefono">{usuario.telefono}</p>
                   </div>
                   <div className="usuario-actions">
-                    <span className="badge-activo">Activo</span>
-                    <button className="btn-action">
+                    <span className="badge-activo">{usuario.activo ? "Activo" : "Inactivo"}</span>
+                    <button
+                      className="btn-action"
+                      onClick={() => {
+                        setUsuarioEditando(usuario);
+                        setNuevoUsuario({
+                          nombre: usuario.nombre,
+                          rol: usuario.rol,
+                          correo: usuario.correo,
+                          contrasena: "",
+                          foto: null,
+                        });
+                        setModalAbierto(true);
+                      }}
+                    >
                       <img src={updateIcon} alt="editar" className="btn-icon" /> Editar
                     </button>
-                    <button className="btn-action">
-                      <img src={searchIcon} alt="buscar" className="btn-icon" /> Busqueda
+                    <button
+                      className="btn-action"
+                      onClick={async () => {
+                        try {
+                          const token = getToken();
+                          await bffDelete(`/api/users/${usuario.id}`, { token });
+                          setPaginaActual(1);
+                        } catch (err) {
+                          alert(err.message || "No se pudo deshabilitar el usuario");
+                        }
+                      }}
+                    >
+                      <img src={searchIcon} alt="deshabilitar" className="btn-icon" /> Deshabilitar
                     </button>
                   </div>
                 </div>
@@ -312,7 +358,13 @@ function Usuarios() {
         </div>
         
     {/* Botón + flotante */}
-    <button className="btn-flotante" onClick={() => setModalAbierto(true)}>
+    <button
+      className="btn-flotante"
+      onClick={() => {
+        setUsuarioEditando(null);
+        setModalAbierto(true);
+      }}
+    >
         <img src={buttonCirculo} alt="agregar" className="btn-flotante-icon" />
     </button>
 
@@ -397,15 +449,52 @@ function Usuarios() {
         <div className="modal-botones">
             <button className="modal-cancelar" onClick={() => {
                 setModalAbierto(false);
+                setUsuarioEditando(null);
                 setNuevoUsuario({ nombre: "", rol: "", correo: "", contrasena: "", foto: null });
                 }}>Cancelar
             </button>
-            <button className="modal-confirmar" onClick={() => {
-            // TODO: enviar nuevo usuario a BD
-            alert(`Usuario ${nuevoUsuario.nombre} creado`);
-            setModalAbierto(false);
-            setNuevoUsuario({ nombre: "", rol: "", correo: "", contrasena: "", foto: null });
-            }}>Confirmar</button>
+            <button
+              className="modal-confirmar"
+              onClick={async () => {
+                try {
+                  const token = getToken();
+                  if (usuarioEditando) {
+                    await bffPut(`/api/users/${usuarioEditando.id}`, {
+                      nombre: nuevoUsuario.nombre,
+                      rol: nuevoUsuario.rol,
+                      correo: nuevoUsuario.correo,
+                      telefono: null,
+                      contrasena: nuevoUsuario.contrasena,
+                      activo: usuarioEditando.activo,
+                      foto: null,
+                    }, { token });
+                  } else {
+                    await bffPost(
+                      "/api/users",
+                      {
+                        nombre: nuevoUsuario.nombre,
+                        rol: nuevoUsuario.rol,
+                        correo: nuevoUsuario.correo,
+                        telefono: null,
+                        contrasena: nuevoUsuario.contrasena,
+                        activo: true,
+                        foto: null,
+                      },
+                      { token }
+                    );
+                  }
+
+                  setModalAbierto(false);
+                  setUsuarioEditando(null);
+                  setNuevoUsuario({ nombre: "", rol: "", correo: "", contrasena: "", foto: null });
+                  setPaginaActual(1);
+                } catch (err) {
+                  alert(err.message || "No se pudo guardar el usuario");
+                }
+              }}
+            >
+              Confirmar
+            </button>
         </div>
 
         </div>

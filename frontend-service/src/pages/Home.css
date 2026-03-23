@@ -298,3 +298,23 @@
   margin: 20px 0 40px;
   cursor: pointer;
 }
+
+/* Books search */
+.books-search {
+  display: flex;
+  justify-content: center;
+  margin: 0 40px 20px;
+}
+
+.books-search .search-input {
+  width: 60%;
+  padding: 10px 14px;
+  border: 2px solid #FFD400;
+  border-radius: 10px;
+  font-size: 14px;
+  outline: none;
+}
+
+.books-search .search-input:focus {
+  background: #FFF;
+}

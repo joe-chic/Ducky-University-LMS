@@ -20,6 +20,7 @@ CREATE TABLE users(
 	mother_lastname VARCHAR(100),
 	user_email sys_email NOT NULL,
 	user_phone generic_phone,
+	role_id INT NOT NULL,
 	user_password VARCHAR(255) NOT NULL,
 	user_state account_state NOT NULL,
 	last_login TIMESTAMPTZ NOT NULL,
@@ -36,6 +37,10 @@ CREATE TABLE roles(
 	role_name VARCHAR(50) NOT NULL,
 	role_description VARCHAR(255)
 );
+
+-- FK added after roles table creation
+ALTER TABLE users
+  ADD CONSTRAINT users_role_fk FOREIGN KEY(role_id) REFERENCES roles(role_id);
 
 CREATE TABLE permissions(
 	permission_id SERIAL PRIMARY KEY,
