@@ -3,7 +3,10 @@ CREATE DATABASE user_accounts_db;
 
 -- Data type definitions
 CREATE DOMAIN sys_email AS VARCHAR(255)
-CHECK(VALUE ~* '^(?!.*\.\..*)(?!\..*)[A-Za-z0-9\.\_\%\+\-]+@(?:ducky\.edu|udem\.edu)$');
+NOT NULL, CHECK(VALUE ~* '^(?!.*\.\..*)(?!\..*)[A-Za-z0-9\.\_\%\+\-]+@(?!^\-.*$)(?!^.*\-$)(?!^..\-\-*$)([A-Za-z0-9\-]){1,253}.([a-z0-9\-]){2,63}$');
+
+CREATE DOMAIN generic_phone AS VARCHAR(15)
+CHECK(VALUE ~ '^\+?([\d\s-]){9,15}$');
 
 CREATE TYPE account_state AS ENUM('active', 'blocked', 'disabled');
 
@@ -16,6 +19,7 @@ CREATE TABLE users(
 	father_lastname VARCHAR(100) NOT NULL,
 	mother_lastname VARCHAR(100),
 	user_email sys_email NOT NULL,
+	user_phone generic_phone,
 	user_password VARCHAR(255) NOT NULL,
 	user_state account_state NOT NULL,
 	last_login TIMESTAMPTZ NOT NULL,
