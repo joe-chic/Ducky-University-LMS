@@ -13,25 +13,46 @@ function Home() {
   const [busqueda, setBusqueda] = useState("");
   const [loading, setLoading] = useState(false);
   const [menuUsuarioAbierto, setMenuUsuarioAbierto] = useState(false);
+  
   const [recursoEditando, setRecursoEditando] = useState(null);
   const [modalRecursoAbierto, setModalRecursoAbierto] = useState(false);
+  
   const userRole = localStorage.getItem("ducky_role");
   const isAdmin = userRole === 'Administrador';
   const isLib = userRole === 'Bibliotecario';
   const isAdminOrLib = isAdmin || isLib;
   
-  // Ejemplares físicos
+  const [metadata, setMetadata] = useState({ authors: [], publishers: [], categories: [], languages: [] });
+  const [page, setPage] = useState(1);
+  const [total, setTotal] = useState(0);
+  const pageSize = 10;
+  const [recursoDetalle, setRecursoDetalle] = useState(null);
+
   const [modalEjemplaresAbierto, setModalEjemplaresAbierto] = useState(false);
   const [recursoActivo, setRecursoActivo] = useState(null);
   const [ejemplares, setEjemplares] = useState([]);
   const [nuevoEjemplar, setNuevoEjemplar] = useState({ barcode: "", location_code: "", health_state: "good", op_state: "available" });
 
+  useEffect(() => {
+     async function loadMetadata() {
+        try {
+           const token = getToken();
+           const data = await bffGet("/api/library-metadata", { token });
+           if(data) setMetadata(data);
+        } catch(e) { console.error(e); }
+     }
+     loadMetadata();
+  }, []);
+
   const fetchRecursos = async (cancelToken) => {
     setLoading(true);
     try {
       const token = getToken();
-      const data = await bffGet("/api/resources", { token, params: { search: busqueda, pageSize: 50 } });
-      if (!cancelToken.cancelled) setRecursos(data.items || []);
+      const data = await bffGet("/api/resources", { token, params: { search: busqueda, page, pageSize } });
+      if (!cancelToken.cancelled) {
+          setRecursos(data.items || []);
+          setTotal(data.total || 0);
+      }
     } catch (err) {
       console.error(err);
       if (!cancelToken.cancelled) setRecursos([]);
@@ -47,10 +68,11 @@ function Home() {
       cancelToken.cancelled = true;
       clearTimeout(t);
     };
-  }, [busqueda]);
+  }, [busqueda, page]);
 
   const handleLogout = () => {
     localStorage.removeItem("ducky_token");
+    localStorage.removeItem("ducky_role");
     navigate("/");
   };
 
@@ -73,7 +95,8 @@ function Home() {
     }
   };
 
-  const handleToggleEstadoRecurso = async (recurso) => {
+  const handleToggleEstadoRecurso = async (recurso, e) => {
+    e.stopPropagation();
     const accion = recurso.disponible ? "deshabilitar" : "habilitar";
     if (!window.confirm(`¿Seguro que deseas ${accion} este recurso?`)) return;
     try {
@@ -88,7 +111,8 @@ function Home() {
     }
   };
 
-  const abrirEjemplares = async (recurso) => {
+  const abrirEjemplares = async (recurso, e) => {
+      e.stopPropagation();
       setRecursoActivo(recurso);
       setModalEjemplaresAbierto(true);
       try {
@@ -125,9 +149,22 @@ function Home() {
       }
   }
 
+  const toggleGenero = (id, checked) => {
+      const g = new Set(recursoEditando.generos_ids || []);
+      if(checked) g.add(id); else g.delete(id);
+      setRecursoEditando({...recursoEditando, generos_ids: Array.from(g)});
+  };
+
+  const toggleLenguaje = (id, checked) => {
+      const l = new Set(recursoEditando.lenguajes_ids || []);
+      if(checked) l.add(id); else l.delete(id);
+      setRecursoEditando({...recursoEditando, lenguajes_ids: Array.from(l)});
+  };
+
+  const totalPages = Math.ceil(total / pageSize);
+
   return (
     <div className="home-container">
-
       {/* Sidebar */}
       <div className={`sidebar ${sidebarOpen ? "sidebar-open" : "sidebar-closed"}`}>
         {sidebarOpen ? (
@@ -153,9 +190,7 @@ function Home() {
         )}
       </div>
 
-      {/* Main content */}
       <div className="main-content">
-
         {/* Navbar */}
         <nav className="navbar">
         <div className="navbar-left">
@@ -194,9 +229,12 @@ function Home() {
         {/* Recursos */}
         <div style={{ padding: "0 60px" }}>
             <div style={{display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: "20px", marginBottom: "20px"}}>
-                <h2 className="section-title" style={{margin: 0}}>Recursos Registrados</h2>
+                <h2 className="section-title" style={{margin: 0}}>Catálogo de Conocimiento</h2>
                 {isAdminOrLib && (
-                <button className="btn-action" style={{backgroundColor: "#4CAF50", color: "white"}} onClick={() => { setRecursoEditando({ titulo: "", tipo: "book", disponible: true }); setModalRecursoAbierto(true); }}>
+                <button className="btn-action" style={{backgroundColor: "#4CAF50", color: "white"}} onClick={() => { 
+                    setRecursoEditando({ titulo: "", tipo: "book", disponible: true, autor_id: "", editorial_id: "", generos_ids: [], lenguajes_ids: [], isbn: "", edicion: "", sinopsis: "", costo: 0, ano_publicacion: "" }); 
+                    setModalRecursoAbierto(true); 
+                }}>
                     ➕ Agregar Recurso
                 </button>
                 )}
@@ -207,109 +245,210 @@ function Home() {
                 className="search-input"
                 style={{width: "100%"}}
                 value={busqueda}
-                onChange={(e) => setBusqueda(e.target.value)}
-                placeholder="Buscar recursos ..."
+                onChange={(e) => { setBusqueda(e.target.value); setPage(1); }}
+                placeholder="Buscar recursos por título, autor o género..."
             />
             </div>
 
-            <div className="books-grid" style={{margin: 0, display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))", gap: "25px"}}>
+            <div className="books-grid" style={{margin: 0, display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))", gap: "25px", marginBottom: "30px"}}>
             {loading ? (
-            <div> Cargando...</div>
-            ) : (
+            <div style={{gridColumn: "1/-1", textAlign: "center", padding: "40px", color: "#666"}}> Cargando...</div>
+            ) : recursos.length > 0 ? (
             recursos.map((recurso) => (
-                <div className="book-card" key={recurso.id}>
+                <div className="book-card book-card-clickable" key={recurso.id} onClick={() => setRecursoDetalle(recurso)}>
                 <div className="book-card-top">
                 <span className="badge-disponible" style={{backgroundColor: recurso.disponible ? "#2E8B57" : "#aa0000"}}>{recurso.disponible ? "Disponible" : "No disponible"}</span>
                 </div>
-                <div className="book-info">
-                    <div className="book-cover">📦</div>
-                    <div className="book-details">
-                    <p className="book-title">{recurso.titulo}</p>
-                    <p className="book-autor" style={{textTransform: "capitalize", fontWeight: "bold"}}>{recurso.tipo.replace('_', ' ')}</p>
-                    <p className="book-editorial">{recurso.editorial || "Sin editorial"}</p>
-                    <p className="book-genero">{recurso.ano_publicacion ? `Año: ${recurso.ano_publicacion}` : ""}</p>
+                <div className="book-card-content">
+                    <div className="book-info">
+                        <div className="book-cover">📚</div>
+                        <div className="book-details">
+                        <p className="book-title">{recurso.titulo}</p>
+                        <p className="book-autor" style={{textTransform: "capitalize", fontWeight: "bold"}}>{recurso.tipo.replace('_', ' ')}</p>
+                        <p className="book-editorial">{recurso.autor || "Autor Desconocido"}</p>
+                        <p className="book-genero" style={{color: "#888", marginTop: "5px"}}>📍 Ubicación: <br/><strong>{recurso.ubicacion || 'Sin ubicación física registrada'}</strong></p>
+                        </div>
                     </div>
                 </div>
                 {isAdminOrLib && (
                 <div className="book-actions">
-                    <button className="btn-action" onClick={() => { setRecursoEditando({ ...recurso }); setModalRecursoAbierto(true); }}>✏️ Editar</button>
-                    <button className="btn-action" onClick={() => handleToggleEstadoRecurso(recurso)}>
+                    <button className="btn-action" onClick={(e) => { e.stopPropagation(); setRecursoEditando({ ...recurso }); setModalRecursoAbierto(true); }}>✏️ Editar</button>
+                    <button className="btn-action" onClick={(e) => handleToggleEstadoRecurso(recurso, e)}>
                     {recurso.disponible ? "🚫 Deshabilitar" : "✅ Habilitar"}
                     </button>
                     {recurso.tipo === 'book' && (
-                        <button className="btn-action" style={{border: "1px solid #2196F3"}} onClick={() => abrirEjemplares(recurso)}>📚 Ejemplares</button>
+                        <button className="btn-action" style={{border: "1px solid #2196F3"}} onClick={(e) => abrirEjemplares(recurso, e)}>📚 Ejemplares</button>
                     )}
                 </div>
                 )}
                 </div>
             ))
+            ) : (
+                <div style={{gridColumn: "1/-1", textAlign: "center", padding: "40px", color: "#666"}}> No se encontraron recursos.</div>
             )}
             </div>
 
-            <h2 className="ver-mas" style={{marginTop: "50px", marginBottom: "50px"}}>Ver más ↓</h2>
+            {/* Pagination Controls */}
+            {totalPages > 1 && (
+                <div className="pagination">
+                    <button className="page-btn" disabled={page === 1} onClick={() => setPage(page - 1)}>Anterior</button>
+                    <span>Página {page} de {totalPages}</span>
+                    <button className="page-btn" disabled={page === totalPages} onClick={() => setPage(page + 1)}>Siguiente</button>
+                </div>
+            )}
         </div>
       </div>
 
-      {/* Modal editar recurso */}
+      {/* Modal Detailed View (Read-Only for Students & General) */}
+      {recursoDetalle && (
+          <div className="modal-overlay" onClick={() => setRecursoDetalle(null)}>
+          <div className="modal-card" style={{maxWidth: "700px"}} onClick={(e) => e.stopPropagation()}>
+            <button className="modal-cerrar" onClick={() => setRecursoDetalle(null)}>✕</button>
+            <div className="modal-header">
+              <h2 className="modal-titulo" style={{fontSize: "24px"}}>{recursoDetalle.titulo}</h2>
+              <p style={{color: "#888", marginTop: "5px", textTransform: "capitalize"}}>{recursoDetalle.tipo.replace('_', ' ')} - {recursoDetalle.disponible ? "🟢 Disponible" : "🔴 Inhabilitado"}</p>
+            </div>
+            <div className="modal-detail-grid">
+                <div className="detail-item">
+                    <span className="detail-label">Autor</span>
+                    {recursoDetalle.autor || "No registrado"}
+                </div>
+                <div className="detail-item">
+                    <span className="detail-label">Editorial</span>
+                    {recursoDetalle.editorial || "No registrada"}
+                </div>
+                <div className="detail-item">
+                    <span className="detail-label">Géneros</span>
+                    {recursoDetalle.genero || "No clasificado"}
+                </div>
+                <div className="detail-item">
+                    <span className="detail-label">Lenguajes de apoyo</span>
+                    {recursoDetalle.lenguajes || "No especificados"}
+                </div>
+                <div className="detail-item">
+                    <span className="detail-label">Año de Publicación</span>
+                    {recursoDetalle.ano_publicacion || "N/A"}
+                </div>
+                <div className="detail-item">
+                    <span className="detail-label">Ubicación Física General</span>
+                    {recursoDetalle.ubicacion || "Sin ubicación activa"}
+                </div>
+                <div className="detail-item full">
+                    <span className="detail-label">Códigos de Barras Registrados (Codebar)</span>
+                    {recursoDetalle.codebar || "N/A"}
+                </div>
+                
+                {recursoDetalle.tipo === 'book' && (
+                    <>
+                        <div className="detail-item">
+                            <span className="detail-label">ISBN</span>
+                            {recursoDetalle.isbn || "N/A"}
+                        </div>
+                        <div className="detail-item">
+                            <span className="detail-label">Edición</span>
+                            {recursoDetalle.edicion || "N/A"}
+                        </div>
+                        <div className="detail-item full">
+                            <span className="detail-label">Sinópsis</span>
+                            {recursoDetalle.sinopsis || "No hay sinópsis disponible para esta obra."}
+                        </div>
+                    </>
+                )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal Editar Recurso (Admin/Lib) */}
       {modalRecursoAbierto && (
         <div className="modal-overlay" onClick={() => setModalRecursoAbierto(false)}>
-          <div className="modal-card" onClick={(e) => e.stopPropagation()}>
+          <div className="modal-card" style={{maxWidth: "700px"}} onClick={(e) => e.stopPropagation()}>
             <button className="modal-cerrar" onClick={() => setModalRecursoAbierto(false)}>✕</button>
             <div className="modal-header">
-              <h2 className="modal-titulo">{recursoEditando?.id ? "Editar Recurso" : "Nuevo Recurso"}</h2>
+              <h2 className="modal-titulo">{recursoEditando?.id ? "Editar Información del Recurso" : "Registrar Nuevo Recurso"}</h2>
             </div>
-            <div className="modal-form">
-              <input
-                type="text"
-                placeholder="Título *"
-                value={recursoEditando?.titulo || ""}
-                onChange={(e) => setRecursoEditando({ ...recursoEditando, titulo: e.target.value })}
-                className="modal-input"
-              />
-              <select
-                className="modal-input"
-                value={recursoEditando?.tipo || "book"}
-                onChange={(e) => setRecursoEditando({ ...recursoEditando, tipo: e.target.value })}
-              >
-                  <option value="book">Book</option>
-                  <option value="journal_magazine">Journal / Magazine</option>
-                  <option value="thesis_dissertation">Thesis / Dissertation</option>
-                  <option value="reference">Reference</option>
-                  <option value="digital_article">Digital Article</option>
-                  <option value="e_book">E-Book</option>
-                  <option value="video">Video</option>
-                  <option value="audio_music">Audio / Music</option>
-              </select>
+            <div className="modal-form" style={{maxHeight: "60vh", overflowY: "auto", paddingRight: "10px"}}>
+              <label className="detail-label" style={{marginTop: "5px"}}>Título *</label>
+              <input type="text" value={recursoEditando?.titulo || ""} onChange={(e) => setRecursoEditando({ ...recursoEditando, titulo: e.target.value })} className="modal-input" />
               
-              <input
-                type="number"
-                placeholder="Año de Publicación"
-                value={recursoEditando?.ano_publicacion || ""}
-                onChange={(e) => setRecursoEditando({ ...recursoEditando, ano_publicacion: Number(e.target.value) })}
-                className="modal-input"
-              />
-              
-              <input
-                type="number"
-                placeholder="Costo"
-                value={recursoEditando?.costo || ""}
-                onChange={(e) => setRecursoEditando({ ...recursoEditando, costo: Number(e.target.value) })}
-                className="modal-input"
-                step="0.01"
-              />
+              <div style={{display: "grid", gridTemplateColumns: "1fr 1fr", gap: "15px"}}>
+                  <div>
+                      <label className="detail-label">Tipo de Recurso *</label>
+                      <select className="modal-input" value={recursoEditando?.tipo || "book"} onChange={(e) => setRecursoEditando({ ...recursoEditando, tipo: e.target.value })}>
+                          <option value="book">Book</option>
+                          <option value="journal_magazine">Journal / Magazine</option>
+                          <option value="thesis_dissertation">Thesis / Dissertation</option>
+                          <option value="reference">Reference</option>
+                          <option value="digital_article">Digital Article</option>
+                          <option value="e_book">E-Book</option>
+                          <option value="video">Video</option>
+                          <option value="audio_music">Audio / Music</option>
+                      </select>
+                  </div>
+                  <div>
+                      <label className="detail-label">Autor (Base de Datos)</label>
+                      <select className="modal-input" value={recursoEditando?.autor_id || ""} onChange={(e) => setRecursoEditando({ ...recursoEditando, autor_id: e.target.value ? Number(e.target.value) : "" })}>
+                          <option value="">Desconocido...</option>
+                          {metadata.authors.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
+                      </select>
+                  </div>
+                  <div>
+                      <label className="detail-label">Editorial / Organización</label>
+                      <select className="modal-input" value={recursoEditando?.editorial_id || ""} onChange={(e) => setRecursoEditando({ ...recursoEditando, editorial_id: e.target.value ? Number(e.target.value) : "" })}>
+                          <option value="">Desconocida...</option>
+                          {metadata.publishers.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+                      </select>
+                  </div>
+                  <div>
+                      <label className="detail-label">Año de Publicación</label>
+                      <input type="number" value={recursoEditando?.ano_publicacion || ""} onChange={(e) => setRecursoEditando({ ...recursoEditando, ano_publicacion: Number(e.target.value) })} className="modal-input" />
+                  </div>
+              </div>
 
-              <label style={{ display: "flex", alignItems: "center", gap: "10px", marginTop: "10px", cursor: "pointer" }}>
-                <input
-                  type="checkbox"
-                  checked={recursoEditando?.disponible ?? true}
-                  onChange={(e) => setRecursoEditando({ ...recursoEditando, disponible: e.target.checked })}
-                />
-                Marcar como Disponible
+              {recursoEditando?.tipo === 'book' && (
+                  <div style={{background: "#fffde7", padding: "15px", borderRadius: "5px", marginBottom: "15px", border: "1px dashed #FFD400"}}>
+                      <h4 style={{marginBottom: "10px", color: "#666"}}>Metadata del Libro</h4>
+                      <div style={{display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px"}}>
+                          <input type="text" placeholder="ISBN (13 dígitos)" className="modal-input" value={recursoEditando?.isbn || ""} onChange={(e) => setRecursoEditando({ ...recursoEditando, isbn: e.target.value })} />
+                          <input type="number" placeholder="Número de Edición" className="modal-input" value={recursoEditando?.edicion || ""} onChange={(e) => setRecursoEditando({ ...recursoEditando, edicion: Number(e.target.value) })} />
+                          <textarea placeholder="Ingresa la Sinópsis de la obra..." className="modal-input" style={{gridColumn: "span 2", minHeight: "60px"}} value={recursoEditando?.sinopsis || ""} onChange={(e) => setRecursoEditando({ ...recursoEditando, sinopsis: e.target.value })} />
+                      </div>
+                  </div>
+              )}
+
+              <label className="detail-label">Géneros Múltiples</label>
+              <div className="checkbox-group">
+                {metadata.categories.map(c => (
+                    <label key={c.id}>
+                        <input type="checkbox" checked={(recursoEditando?.generos_ids || []).includes(c.id)} onChange={e => toggleGenero(c.id, e.target.checked)} /> {c.name}
+                    </label>
+                ))}
+              </div>
+
+              <label className="detail-label">Lenguajes de Apoyo Multiples</label>
+              <div className="checkbox-group">
+                {metadata.languages.map(l => (
+                    <label key={l.id}>
+                        <input type="checkbox" checked={(recursoEditando?.lenguajes_ids || []).includes(l.id)} onChange={e => toggleLenguaje(l.id, e.target.checked)} /> {l.name}
+                    </label>
+                ))}
+              </div>
+
+              <label style={{ display: "flex", alignItems: "center", gap: "10px", marginTop: "10px", cursor: "pointer", fontWeight: "bold", background: "#f0f0f0", padding: "10px", borderRadius: "5px" }}>
+                <input type="checkbox" checked={recursoEditando?.disponible ?? true} onChange={(e) => setRecursoEditando({ ...recursoEditando, disponible: e.target.checked })} />
+                Marcar como Visible/Disponible al Público
               </label>
+
+              {recursoEditando?.id && recursoEditando?.tipo === 'book' && (
+                  <div style={{background: "#e3f2fd", padding: "10px", borderRadius: "5px", marginTop: "15px", border: "1px solid #90caf9"}}>
+                     <span className="detail-label" style={{color: "#0d47a1"}}>📝 Recordatorio de Operación:</span>
+                     <p style={{color: "#0d47a1", fontSize: "13px"}}>La <strong>Ubicación Física</strong> y <strong>Codebar</strong> detallada deben manejarse exclusivamente a través del menú individual de <strong>"📚 Ejemplares"</strong> para lograr asociar múltiples entidades a este único recurso matriz.</p>
+                  </div>
+              )}
             </div>
             <div className="modal-botones" style={{ marginTop: "20px" }}>
               <button className="modal-cancelar" onClick={() => setModalRecursoAbierto(false)}>Cancelar</button>
-              <button className="modal-confirmar" onClick={handleGuardarRecurso}>Guardar</button>
+              <button className="modal-confirmar" onClick={handleGuardarRecurso}>Guardar Cambios BD</button>
             </div>
           </div>
         </div>
@@ -321,14 +460,14 @@ function Home() {
           <div className="modal-card" style={{maxWidth: "600px"}} onClick={(e) => e.stopPropagation()}>
             <button className="modal-cerrar" onClick={() => setModalEjemplaresAbierto(false)}>✕</button>
             <div className="modal-header">
-              <h2 className="modal-titulo">Ejemplares Físicos</h2>
+              <h2 className="modal-titulo">Gestor de Ejemplares Físicos (Codebar & Ubicación)</h2>
               <p style={{margin: 0, color: "#666"}}>{recursoActivo.titulo}</p>
             </div>
             <div className="modal-form" style={{maxHeight: "300px", overflowY: "auto"}}>
-                <table style={{width: "100%", textAlign: "left", borderCollapse: "collapse", marginBottom: "15px"}}>
+                <table style={{width: "100%", textAlign: "left", borderCollapse: "collapse", marginBottom: "15px", fontSize: "14px"}}>
                     <thead>
                         <tr style={{borderBottom: "1px solid #ddd"}}>
-                            <th>Barcode</th>
+                            <th>Codebar</th>
                             <th>Ubicación</th>
                             <th>Salud</th>
                             <th>Estado Op</th>
@@ -354,7 +493,7 @@ function Home() {
 
                 <div style={{background: "#f9f9f9", padding: "15px", borderRadius: "5px", display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px"}}>
                     <input type="text" placeholder="Código de Barras *" className="modal-input" style={{margin: 0}} value={nuevoEjemplar.barcode} onChange={e => setNuevoEjemplar({...nuevoEjemplar, barcode: e.target.value})} />
-                    <input type="text" placeholder="Ubicación *" className="modal-input" style={{margin: 0}} value={nuevoEjemplar.location_code} onChange={e => setNuevoEjemplar({...nuevoEjemplar, location_code: e.target.value})} />
+                    <input type="text" placeholder="Ubicación Física *" className="modal-input" style={{margin: 0}} value={nuevoEjemplar.location_code} onChange={e => setNuevoEjemplar({...nuevoEjemplar, location_code: e.target.value})} />
                     <select className="modal-input" style={{margin: 0}} value={nuevoEjemplar.health_state} onChange={e => setNuevoEjemplar({...nuevoEjemplar, health_state: e.target.value})}>
                         <option value="good">Good</option>
                         <option value="damaged">Damaged</option>

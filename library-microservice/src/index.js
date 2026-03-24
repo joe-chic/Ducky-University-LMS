@@ -3,7 +3,7 @@ require("dotenv").config();
 const express = require("express");
 const cors = require("cors");
 
-const { query } = require("./db");
+const { query, pool } = require("./db");
 
 const app = express();
 app.use(cors());
@@ -20,14 +20,45 @@ function resourceRowToDto(row) {
     id: row.id,
     titulo: row.titulo,
     autor: row.autor,
+    autor_id: row.autor_id,
     editorial: row.editorial,
-    genero: row.genero,
+    editorial_id: row.editorial_id,
+    genero: row.generos, 
+    generos_ids: row.generos_ids ? row.generos_ids.split(',').map(Number) : [],
     disponible: row.disponible,
     tipo: row.tipo,
     ano_publicacion: row.ano_publicacion,
-    costo: row.costo
+    costo: row.costo,
+    isbn: row.isbn,
+    edicion: row.edicion,
+    sinopsis: row.sinopsis,
+    lenguajes: row.lenguajes,
+    lenguajes_ids: row.lenguajes_ids ? row.lenguajes_ids.split(',').map(Number) : [],
+    ubicacion: row.ubicacion,
+    codebar: row.codebar
   };
 }
+
+// METADATA (For Dropdowns)
+app.get("/library-metadata", async (req, res) => {
+  try {
+     const [authors, publishers, categories, languages] = await Promise.all([
+       query(`SELECT colaborator_id AS id, CONCAT_WS(' ', first_name, middle_name, father_lastname, mother_lastname) AS name FROM collaborators ORDER BY first_name`),
+       query(`SELECT organization_id AS id, organization_name AS name FROM organizations ORDER BY organization_name`),
+       query(`SELECT category_id AS id, category_name AS name FROM categories ORDER BY category_name`),
+       query(`SELECT language_id AS id, language_name AS name FROM languages ORDER BY language_name`)
+     ]);
+     res.json({
+       authors: authors.rows,
+       publishers: publishers.rows,
+       categories: categories.rows,
+       languages: languages.rows
+     });
+  } catch(err) {
+     console.error(err);
+     res.status(500).json({ error: "Failed to fetch metadata" });
+  }
+});
 
 // GET /resources?search=&page=&pageSize=
 app.get("/resources", async (req, res) => {
@@ -70,19 +101,33 @@ app.get("/resources", async (req, res) => {
           r.resource_id AS id,
           r.resource_title AS titulo,
           CONCAT_WS(' ', c.first_name, c.middle_name, c.father_lastname, c.mother_lastname) AS autor,
+          c.colaborator_id AS autor_id,
           o.organization_name AS editorial,
-          MAX(cat.category_name) AS genero,
+          o.organization_id AS editorial_id,
+          STRING_AGG(DISTINCT cat.category_name, ', ') AS generos,
+          STRING_AGG(DISTINCT cat.category_id::text, ',') AS generos_ids,
           (r.resource_state = 'available') AS disponible,
           r.resource_type AS tipo,
           r.resource_publication_year AS ano_publicacion,
-          r.resource_cost AS costo
+          r.resource_cost AS costo,
+          bm.book_isbn AS isbn,
+          bm.book_edition_number AS edicion,
+          bm.book_synopsis AS sinopsis,
+          STRING_AGG(DISTINCT l.language_name, ', ') AS lenguajes,
+          STRING_AGG(DISTINCT l.language_id::text, ',') AS lenguajes_ids,
+          STRING_AGG(DISTINCT pe.example_location_code, ', ') AS ubicacion,
+          STRING_AGG(DISTINCT pe.barcode, ', ') AS codebar
        FROM resources r
        LEFT JOIN collaborators c ON c.colaborator_id = r.author_principal_id
        LEFT JOIN organizations o ON o.organization_id = r.publisher_id
        LEFT JOIN categories_resources cr ON cr.resource_id = r.resource_id
        LEFT JOIN categories cat ON cat.category_id = cr.category_id
+       LEFT JOIN book_metadata bm ON bm.resource_id = r.resource_id
+       LEFT JOIN supplementary_languages sl ON sl.resource_id = r.resource_id
+       LEFT JOIN languages l ON l.language_id = sl.language_id
+       LEFT JOIN physical_examples pe ON pe.resource_id = r.resource_id
        ${whereSql}
-       GROUP BY r.resource_id, r.resource_title, c.first_name, c.middle_name, c.father_lastname, c.mother_lastname, o.organization_name, r.resource_state, r.resource_type, r.resource_publication_year, r.resource_cost
+       GROUP BY r.resource_id, c.first_name, c.middle_name, c.father_lastname, c.mother_lastname, c.colaborator_id, o.organization_name, o.organization_id, r.resource_state, r.resource_type, r.resource_publication_year, r.resource_cost, bm.book_isbn, bm.book_edition_number, bm.book_synopsis
        ORDER BY r.resource_id DESC
        LIMIT $${params.length + 1} OFFSET $${params.length + 2}`,
       [...params, pageSize, offset]
@@ -91,7 +136,6 @@ app.get("/resources", async (req, res) => {
     const items = result.rows.map(resourceRowToDto);
     res.json({ items, total, page, pageSize });
   } catch (err) {
-    // eslint-disable-next-line no-console
     console.error(err);
     res.status(500).json({ message: "Failed to fetch resources" });
   }
@@ -108,26 +152,39 @@ app.get("/resources/:id", async (req, res) => {
           r.resource_id AS id,
           r.resource_title AS titulo,
           CONCAT_WS(' ', c.first_name, c.middle_name, c.father_lastname, c.mother_lastname) AS autor,
+          c.colaborator_id AS autor_id,
           o.organization_name AS editorial,
-          MAX(cat.category_name) AS genero,
+          o.organization_id AS editorial_id,
+          STRING_AGG(DISTINCT cat.category_name, ', ') AS generos,
+          STRING_AGG(DISTINCT cat.category_id::text, ',') AS generos_ids,
           (r.resource_state = 'available') AS disponible,
           r.resource_type AS tipo,
           r.resource_publication_year AS ano_publicacion,
-          r.resource_cost AS costo
+          r.resource_cost AS costo,
+          bm.book_isbn AS isbn,
+          bm.book_edition_number AS edicion,
+          bm.book_synopsis AS sinopsis,
+          STRING_AGG(DISTINCT l.language_name, ', ') AS lenguajes,
+          STRING_AGG(DISTINCT l.language_id::text, ',') AS lenguajes_ids,
+          STRING_AGG(DISTINCT pe.example_location_code, ', ') AS ubicacion,
+          STRING_AGG(DISTINCT pe.barcode, ', ') AS codebar
        FROM resources r
        LEFT JOIN collaborators c ON c.colaborator_id = r.author_principal_id
        LEFT JOIN organizations o ON o.organization_id = r.publisher_id
        LEFT JOIN categories_resources cr ON cr.resource_id = r.resource_id
        LEFT JOIN categories cat ON cat.category_id = cr.category_id
+       LEFT JOIN book_metadata bm ON bm.resource_id = r.resource_id
+       LEFT JOIN supplementary_languages sl ON sl.resource_id = r.resource_id
+       LEFT JOIN languages l ON l.language_id = sl.language_id
+       LEFT JOIN physical_examples pe ON pe.resource_id = r.resource_id
        WHERE r.resource_id = $1
-       GROUP BY r.resource_id, r.resource_title, c.first_name, c.middle_name, c.father_lastname, c.mother_lastname, o.organization_name, r.resource_state, r.resource_type, r.resource_publication_year, r.resource_cost`,
+       GROUP BY r.resource_id, c.first_name, c.middle_name, c.father_lastname, c.mother_lastname, c.colaborator_id, o.organization_name, o.organization_id, r.resource_state, r.resource_type, r.resource_publication_year, r.resource_cost, bm.book_isbn, bm.book_edition_number, bm.book_synopsis`,
       [id]
     );
 
     if (result.rows.length === 0) return res.status(404).json({ message: "Resource not found" });
     res.json(resourceRowToDto(result.rows[0]));
   } catch (err) {
-    // eslint-disable-next-line no-console
     console.error(err);
     res.status(500).json({ message: "Failed to fetch resource" });
   }
@@ -135,52 +192,100 @@ app.get("/resources/:id", async (req, res) => {
 
 // POST /resources
 app.post("/resources", async (req, res) => {
+  const client = await pool.connect();
   try {
-    const { titulo, tipo, disponible, ano_publicacion, costo } = req.body || {};
+    await client.query('BEGIN');
+    const { titulo, tipo, disponible, ano_publicacion, costo, autor_id, editorial_id, generos_ids, lenguajes_ids, isbn, edicion, sinopsis } = req.body || {};
     if (!titulo || !tipo) return res.status(400).json({ message: "Title and type are required" });
     
-    // Fix sequence if broke
-    await query(`SELECT setval('resources_resource_id_seq', COALESCE((SELECT MAX(resource_id) FROM resources), 1))`);
+    await client.query(`SELECT setval('resources_resource_id_seq', COALESCE((SELECT MAX(resource_id) FROM resources), 1))`);
     
     const state = disponible ? 'available' : 'disabled';
     
-    const insertRes = await query(
+    const insertRes = await client.query(
       `INSERT INTO resources(
-        resource_title, resource_type, resource_state, resource_publication_year, resource_cost,
+        resource_title, resource_type, resource_state, resource_publication_year, resource_cost, author_principal_id, publisher_id,
         created_at, created_by, latest_modified_at, latest_modified_by
-       ) VALUES ($1, $2, $3, $4, $5, NOW(), 1, NOW(), 1) RETURNING resource_id`,
-      [titulo, tipo, state, ano_publicacion || null, costo || 0]
+       ) VALUES ($1, $2, $3, $4, $5, $6, $7, NOW(), 1, NOW(), 1) RETURNING resource_id`,
+      [titulo, tipo, state, ano_publicacion || null, costo || 0, autor_id || null, editorial_id || null]
     );
-    res.json({ id: insertRes.rows[0].resource_id, ok: true });
+    const resource_id = insertRes.rows[0].resource_id;
+
+    if (tipo === 'book' && (isbn || edicion || sinopsis)) {
+       await client.query(`INSERT INTO book_metadata(resource_id, book_isbn, book_edition_number, book_synopsis) VALUES ($1, $2, $3, $4)`, [resource_id, isbn || null, edicion || null, sinopsis || null]);
+    }
+
+    if (Array.isArray(generos_ids) && generos_ids.length > 0) {
+       for(const cid of generos_ids) {
+          await client.query(`INSERT INTO categories_resources(category_id, resource_id) VALUES ($1, $2) ON CONFLICT DO NOTHING`, [cid, resource_id]);
+       }
+    }
+    
+    if (Array.isArray(lenguajes_ids) && lenguajes_ids.length > 0) {
+       for(const lid of lenguajes_ids) {
+          await client.query(`INSERT INTO supplementary_languages(language_id, resource_id) VALUES ($1, $2) ON CONFLICT DO NOTHING`, [lid, resource_id]);
+       }
+    }
+
+    await client.query('COMMIT');
+    res.json({ id: resource_id, ok: true });
   } catch (err) {
-    // eslint-disable-next-line no-console
+    await client.query('ROLLBACK');
     console.error(err);
     res.status(500).json({ message: "Failed to create resource" });
+  } finally {
+    client.release();
   }
 });
 
 // PUT /resources/:id
 app.put("/resources/:id", async (req, res) => {
+  const client = await pool.connect();
   try {
+    await client.query('BEGIN');
     const id = Number(req.params.id);
     if (!id) return res.status(400).json({ message: "Invalid id" });
-    const { titulo, tipo, disponible, ano_publicacion, costo } = req.body || {};
+    const { titulo, tipo, disponible, ano_publicacion, costo, autor_id, editorial_id, generos_ids, lenguajes_ids, isbn, edicion, sinopsis } = req.body || {};
     if (!titulo || !tipo) return res.status(400).json({ message: "Title and type are required" });
     
     const state = disponible ? 'available' : 'disabled';
     
-    await query(
+    await client.query(
       `UPDATE resources
        SET resource_title = $1, resource_type = $2, resource_state = $3, 
-           resource_publication_year = $4, resource_cost = $5, latest_modified_at = NOW()
-       WHERE resource_id = $6`,
-      [titulo, tipo, state, ano_publicacion || null, costo || 0, id]
+           resource_publication_year = $4, resource_cost = $5, author_principal_id = $6, publisher_id = $7, latest_modified_at = NOW()
+       WHERE resource_id = $8`,
+      [titulo, tipo, state, ano_publicacion || null, costo || 0, autor_id || null, editorial_id || null, id]
     );
+
+    if (tipo === 'book') {
+       await client.query(`INSERT INTO book_metadata(resource_id, book_isbn, book_edition_number, book_synopsis) VALUES ($1, $2, $3, $4) ON CONFLICT (resource_id) DO UPDATE SET book_isbn = $2, book_edition_number = $3, book_synopsis = $4`, [id, isbn || null, edicion || null, sinopsis || null]);
+    } else {
+       await client.query(`DELETE FROM book_metadata WHERE resource_id = $1`, [id]);
+    }
+
+    await client.query(`DELETE FROM categories_resources WHERE resource_id = $1`, [id]);
+    if (Array.isArray(generos_ids)) {
+       for(const cid of generos_ids) {
+          await client.query(`INSERT INTO categories_resources(category_id, resource_id) VALUES ($1, $2)`, [cid, id]);
+       }
+    }
+
+    await client.query(`DELETE FROM supplementary_languages WHERE resource_id = $1`, [id]);
+    if (Array.isArray(lenguajes_ids)) {
+       for(const lid of lenguajes_ids) {
+          await client.query(`INSERT INTO supplementary_languages(language_id, resource_id) VALUES ($1, $2)`, [lid, id]);
+       }
+    }
+
+    await client.query('COMMIT');
     res.json({ ok: true });
   } catch (err) {
-    // eslint-disable-next-line no-console
+    await client.query('ROLLBACK');
     console.error(err);
     res.status(500).json({ message: "Failed to update resource" });
+  } finally {
+    client.release();
   }
 });
 
@@ -198,7 +303,6 @@ app.delete("/resources/:id", async (req, res) => {
     );
     res.json({ ok: true });
   } catch (err) {
-    // eslint-disable-next-line no-console
     console.error(err);
     res.status(500).json({ message: "Failed to disable resource" });
   }
@@ -219,7 +323,6 @@ app.get("/resources/:id/examples", async (req, res) => {
     );
     res.json(result.rows);
   } catch(err) {
-    // eslint-disable-next-line no-console
     console.error(err);
     res.status(500).json({ message: "Failed to fetch examples" });
   }
@@ -240,7 +343,6 @@ app.post("/resources/:id/examples", async (req, res) => {
     );
     res.json({ok: true});
   } catch(err) {
-    // eslint-disable-next-line no-console
     console.error(err);
     res.status(500).json({ message: "Failed to create example" });
   }
@@ -259,7 +361,6 @@ app.put("/resources/:id/examples/:barcode", async (req, res) => {
     );
     res.json({ok: true});
   } catch(err) {
-    // eslint-disable-next-line no-console
     console.error(err);
     res.status(500).json({ message: "Failed to update example" });
   }
@@ -274,13 +375,11 @@ app.delete("/resources/:id/examples/:barcode", async (req, res) => {
     );
     res.json({ok: true});
   } catch(err) {
-    // eslint-disable-next-line no-console
     console.error(err);
     res.status(500).json({ message: "Failed to disable example" });
   }
 });
 
 app.listen(PORT, () => {
-  // eslint-disable-next-line no-console
   console.log(`library-microservice listening on :${PORT}`);
 });

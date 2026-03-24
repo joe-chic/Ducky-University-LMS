@@ -122,6 +122,7 @@ app.get("/api/resources/:id", (req, res) => proxyResource(req, res, `/resources/
 app.post("/api/resources", (req, res) => proxyResource(req, res, "/resources"));
 app.put("/api/resources/:id", (req, res) => proxyResource(req, res, `/resources/${req.params.id}`));
 app.delete("/api/resources/:id", (req, res) => proxyResource(req, res, `/resources/${req.params.id}`));
+app.get("/api/library-metadata", (req, res) => proxyResource(req, res, "/library-metadata"));
 
 // PHYSICAL EXAMPLES
 app.get("/api/resources/:id/examples", (req, res) => proxyResource(req, res, `/resources/${req.params.id}/examples`));

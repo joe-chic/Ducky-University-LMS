@@ -318,3 +318,89 @@
 .books-search .search-input:focus {
   background: #FFF;
 }
+
+/* Checkbox groups for modal */
+.checkbox-group {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 5px;
+    max-height: 120px;
+    overflow-y: auto;
+    border: 1px solid #ddd;
+    padding: 10px;
+    margin-bottom: 15px;
+    background: #f9f9f9;
+    border-radius: 4px;
+}
+.checkbox-group label {
+    font-size: 13px;
+    display: flex;
+    align-items: center;
+    gap: 5px;
+}
+
+/* Detailed modal */
+.modal-detail-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 15px;
+    margin-top: 20px;
+    font-size: 14px;
+}
+.detail-item {
+    background: #f4f6f8;
+    padding: 10px;
+    border-left: 3px solid #FFD400;
+    border-radius: 5px;
+}
+.detail-item.full {
+    grid-column: span 2;
+}
+.detail-label {
+    font-weight: bold;
+    color: #666;
+    margin-bottom: 5px;
+    display: block;
+    font-size: 12px;
+    text-transform: uppercase;
+}
+
+/* Pagination */
+.pagination {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 15px;
+    margin-bottom: 40px;
+}
+.page-btn {
+    background: #212529;
+    color: white;
+    border: none;
+    padding: 8px 16px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-weight: bold;
+}
+.page-btn:disabled {
+    background: #ccc;
+    cursor: not-allowed;
+}
+
+/* Make book card clickable */
+.book-card-clickable {
+    cursor: pointer;
+    transition: transform 0.2s, box-shadow 0.2s;
+    background: #fff;
+    box-shadow: 0 4px 6px rgba(0,0,0,0.05);
+    border: 1px solid #eaeaea;
+}
+.book-card-clickable:hover {
+    transform: translateY(-5px);
+    box-shadow: 0 10px 20px rgba(0,0,0,0.1);
+    border-color: #FFD400;
+}
+
+.book-card-content {
+    padding: 15px;
+}
