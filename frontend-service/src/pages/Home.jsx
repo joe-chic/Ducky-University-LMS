@@ -3,12 +3,13 @@ import "./Home.css";
 import landingImage from "../assets/images/landingImage.png";
 import duckIcon from "../assets/icons/duckIcon.svg";
 import duckIconWhite from "../assets/icons/duckIconWhite.svg";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useLocation } from "react-router-dom";
 import { bffGet, bffPut, bffDelete, bffPost, getToken } from "../api/bff";
 
 function Home() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const navigate = useNavigate();
+  const location = useLocation();
   const [recursos, setRecursos] = useState([]);
   const [busqueda, setBusqueda] = useState("");
   const [loading, setLoading] = useState(false);
@@ -20,7 +21,8 @@ function Home() {
   const userRole = localStorage.getItem("ducky_role");
   const isAdmin = userRole === 'Administrador';
   const isLib = userRole === 'Bibliotecario';
-  const isAdminOrLib = isAdmin || isLib;
+  const hasManagementRole = isAdmin || isLib;
+  const isManagementView = hasManagementRole && location.pathname.includes("/libros");
   
   const [metadata, setMetadata] = useState({ authors: [], publishers: [], categories: [], languages: [] });
   const [page, setPage] = useState(1);
@@ -178,9 +180,9 @@ function Home() {
               <button className="sidebar-arrow" onClick={() => setSidebarOpen(false)}>◀</button>
             </div>
             <div className="sidebar-menu">
-              <div className="sidebar-item" onClick={() => navigate("/home")}>Inicio</div>
-              {isAdmin && <div className="sidebar-item" onClick={() => navigate("/usuarios")}>Usuarios</div>}
-              {isAdminOrLib && <div className="sidebar-item active" onClick={() => navigate("/libros")}>Recursos</div>}
+              <div className={`sidebar-item ${location.pathname.includes('/home') ? 'active' : ''}`} onClick={() => navigate("/home")}>Inicio</div>
+              {isAdmin && <div className={`sidebar-item ${location.pathname.includes('/usuarios') ? 'active' : ''}`} onClick={() => navigate("/usuarios")}>Usuarios</div>}
+              {hasManagementRole && <div className={`sidebar-item ${location.pathname.includes('/libros') ? 'active' : ''}`} onClick={() => navigate("/libros")}>Recursos</div>}
             </div>
           </>
         ) : (
@@ -229,8 +231,8 @@ function Home() {
         {/* Recursos */}
         <div style={{ padding: "0 60px" }}>
             <div style={{display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: "20px", marginBottom: "20px"}}>
-                <h2 className="section-title" style={{margin: 0}}>Catálogo de Conocimiento</h2>
-                {isAdminOrLib && (
+                <h2 className="section-title" style={{margin: 0}}>{isManagementView ? "Gestión y Control de Recursos" : "Catálogo de Conocimiento"}</h2>
+                {isManagementView && (
                 <button className="btn-action" style={{backgroundColor: "#4CAF50", color: "white"}} onClick={() => { 
                     setRecursoEditando({ titulo: "", tipo: "book", disponible: true, autor_id: "", editorial_id: "", generos_ids: [], lenguajes_ids: [], isbn: "", edicion: "", sinopsis: "", costo: 0, ano_publicacion: "" }); 
                     setModalRecursoAbierto(true); 
@@ -270,7 +272,7 @@ function Home() {
                         </div>
                     </div>
                 </div>
-                {isAdminOrLib && (
+                {isManagementView && (
                 <div className="book-actions">
                     <button className="btn-action" onClick={(e) => { e.stopPropagation(); setRecursoEditando({ ...recurso }); setModalRecursoAbierto(true); }}>✏️ Editar</button>
                     <button className="btn-action" onClick={(e) => handleToggleEstadoRecurso(recurso, e)}>
