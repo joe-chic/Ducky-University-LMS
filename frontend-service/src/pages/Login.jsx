@@ -21,6 +21,7 @@ function Login() {
         password: contrasena,
       });
       localStorage.setItem("ducky_token", data.token);
+      localStorage.setItem("ducky_role", data.user.rol);
       navigate("/home");
     } catch (err) {
       alert(err.message || "No se pudo iniciar sesión");

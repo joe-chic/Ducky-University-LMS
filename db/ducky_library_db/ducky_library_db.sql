@@ -120,6 +120,7 @@ CREATE TABLE collaborators_resources(
 -- Physical examples
 CREATE TABLE physical_examples(
   barcode VARCHAR(14) PRIMARY KEY,
+  resource_id BIGINT NOT NULL REFERENCES resources(resource_id),
   example_location_code VARCHAR(50) NOT NULL,
   example_health_state physical_media_health_state NOT NULL,
   example_op_state physical_media_op_state NOT NULL,

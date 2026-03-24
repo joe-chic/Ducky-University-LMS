@@ -104,11 +104,13 @@ VALUES
 
 -- Physical examples (book items)
 INSERT INTO physical_examples(
-  barcode, example_location_code, example_health_state, example_op_state,
+  barcode, resource_id, example_location_code, example_health_state, example_op_state,
   latest_modified_at, latest_modified_by
 )
 VALUES
-  ('PHY-5001', 'MAIN-FL1-REF-S1', 'good', 'available', '2025-10-27T11:30:00-04', 1);
+  ('PHY-5001', 5001, 'MAIN-FL1-REF-S1', 'good', 'available', '2025-10-27T11:30:00-04', 1),
+  ('PHY-5002', 5001, 'MAIN-FL2-FIC-A3', 'damaged', 'on loan', '2025-10-28T10:00:00-04', 1),
+  ('PHY-5003', 5001, 'MAIN-FL2-FIC-A4', 'good', 'available', '2025-10-28T10:30:00-04', 1);
 
 -- Keywords
 INSERT INTO keywords(keyword_id, keyword)

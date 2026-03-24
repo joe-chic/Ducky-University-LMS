@@ -21,6 +21,16 @@ function Usuarios() {
   const registrosPorPagina = 10;
   const [usuarios, setUsuarios] = useState([]);
   const [totalUsuarios, setTotalUsuarios] = useState(0);
+  const [refreshKey, setRefreshKey] = useState(0);
+
+  const userRole = localStorage.getItem("ducky_role");
+  const isAdmin = userRole === 'Administrador';
+
+  useEffect(() => {
+    if (!isAdmin) {
+      navigate("/home");
+    }
+  }, [isAdmin, navigate]);
 
   // TODO: reemplazar permisosIniciales con fetch a BD cuando esté lista
   // Ejemplo: useEffect(() => { fetch('/api/permisos').then(r => r.json()).then(setPermisos) }, []);
@@ -29,6 +39,7 @@ function Usuarios() {
   const [permisosModificados, setPermisosModificados] = useState({});
   const [seccionesAbiertas, setSeccionesAbiertas] = useState({});
   const [modalAbierto, setModalAbierto] = useState(false);
+  const [menuUsuarioAbierto, setMenuUsuarioAbierto] = useState(false);
   const [usuarioEditando, setUsuarioEditando] = useState(null);
   const [nuevoUsuario, setNuevoUsuario] = useState({
     nombre: "",
@@ -73,7 +84,7 @@ function Usuarios() {
     return () => {
       cancelled = true;
     };
-  }, [busqueda, paginaActual]);
+  }, [busqueda, paginaActual, refreshKey]);
 
   function toggleRol(rol) {
     setRolesAbiertos(prev => ({ ...prev, [rol]: !prev[rol] }));
@@ -125,6 +136,11 @@ function Usuarios() {
     setSeccionesAbiertas(prev => ({ ...prev, [key]: !prev[key] }));
  }
 
+  const handleLogout = () => {
+    localStorage.removeItem("ducky_token");
+    navigate("/");
+  };
+
   return (
     <div className="usuarios-container">
 
@@ -173,15 +189,20 @@ function Usuarios() {
             )}
           </div>
           <div className="navbar-right">
-            <span>Soporte</span>
-            <div className="navbar-icon-group">
+            <span style={{cursor: "pointer"}} onClick={() => alert("Próximamente")}>Soporte</span>
+            <div className="navbar-icon-group" style={{cursor: "pointer"}} onClick={() => alert("Próximamente")}>
               <span>Notificaciones</span>
               <img src={notificationIcon} alt="notificaciones" className="nav-icon" />
             </div>
-            <div className="navbar-icon-group">
+            <div className="navbar-icon-group" style={{cursor: "pointer", position: "relative"}} onClick={() => setMenuUsuarioAbierto(!menuUsuarioAbierto)}>
               <span>{usuarioSesion.nombre}</span>
               {/* TODO: reemplazar con usuarioSesion.foto cuando venga de BD */}
               <img src={usuarioSesion.foto || userIconNav} alt="usuario" className="nav-icon" />
+              {menuUsuarioAbierto && (
+                <div style={{ position: "absolute", top: "100%", right: 0, backgroundColor: "#fff", color: "#333", padding: "10px", borderRadius: "4px", boxShadow: "0 2px 5px rgba(0,0,0,0.2)", zIndex: 10, minWidth: "120px" }}>
+                  <button onClick={handleLogout} style={{ border: "none", background: "none", cursor: "pointer", color: "red", padding: "5px", width: "100%", textAlign: "left" }}>Cerrar sesión</button>
+                </div>
+              )}
             </div>
           </div>
         </nav>
@@ -242,16 +263,29 @@ function Usuarios() {
                     <button
                       className="btn-action"
                       onClick={async () => {
+                        const accion = usuario.activo ? "deshabilitar" : "habilitar";
+                        if (!window.confirm(`¿Seguro que deseas ${accion} este usuario?`)) return;
                         try {
                           const token = getToken();
-                          await bffDelete(`/api/users/${usuario.id}`, { token });
-                          setPaginaActual(1);
+                          if (usuario.activo) {
+                            await bffDelete(`/api/users/${usuario.id}`, { token });
+                            setUsuarios(prev => prev.map(u => u.id === usuario.id ? { ...u, activo: false } : u));
+                          } else {
+                            await bffPut(`/api/users/${usuario.id}`, {
+                              nombre: usuario.nombre,
+                              rol: usuario.rol,
+                              correo: usuario.correo,
+                              activo: true
+                            }, { token });
+                            setUsuarios(prev => prev.map(u => u.id === usuario.id ? { ...u, activo: true } : u));
+                          }
                         } catch (err) {
-                          alert(err.message || "No se pudo deshabilitar el usuario");
+                          alert(err.message || `No se pudo ${accion} el usuario`);
                         }
                       }}
                     >
-                      <img src={searchIcon} alt="deshabilitar" className="btn-icon" /> Deshabilitar
+                      <span style={{marginRight: "6px", fontSize: "16px"}}>{usuario.activo ? "🚫" : "✅"}</span> 
+                      {usuario.activo ? "Deshabilitar" : "Habilitar"}
                     </button>
                   </div>
                 </div>
@@ -456,6 +490,14 @@ function Usuarios() {
             <button
               className="modal-confirmar"
               onClick={async () => {
+                if (!nuevoUsuario.nombre || !nuevoUsuario.rol || !nuevoUsuario.correo) {
+                  alert("Por favor, llena los campos: Nombre, Rol y Correo.");
+                  return;
+                }
+                if (!usuarioEditando && !nuevoUsuario.contrasena) {
+                  alert("Por favor, ingresa una contraseña para el nuevo usuario.");
+                  return;
+                }
                 try {
                   const token = getToken();
                   if (usuarioEditando) {
@@ -487,7 +529,7 @@ function Usuarios() {
                   setModalAbierto(false);
                   setUsuarioEditando(null);
                   setNuevoUsuario({ nombre: "", rol: "", correo: "", contrasena: "", foto: null });
-                  setPaginaActual(1);
+                  setRefreshKey(k => k + 1);
                 } catch (err) {
                   alert(err.message || "No se pudo guardar el usuario");
                 }

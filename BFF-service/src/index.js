@@ -89,38 +89,47 @@ app.delete("/api/users/:id", async (req, res) => {
   }
 });
 
-// Books
-app.get("/api/books", async (req, res) => {
-  try {
-    const token = req.headers.authorization;
-    const response = await axios.get(`${LIBRARY_BASE_URL}/books`, {
-      params: req.query,
-      headers: token ? { Authorization: token } : undefined,
-      timeout: 10_000,
-    });
-    res.json(response.data);
-  } catch (err) {
-    const status = err?.response?.status || 500;
-    res.status(status).json({ message: err?.response?.data?.message || "Failed to fetch books" });
-  }
-});
 
-app.get("/api/books/:id", async (req, res) => {
+// -------------------------------------------------------------
+// RESOURCES
+// -------------------------------------------------------------
+const proxyResource = async (req, res, path) => {
   try {
     const token = req.headers.authorization;
-    const response = await axios.get(`${LIBRARY_BASE_URL}/books/${req.params.id}`, {
+    const method = req.method.toLowerCase();
+    const config = {
+      method,
+      url: `${LIBRARY_BASE_URL}${path}`,
       headers: token ? { Authorization: token } : undefined,
       timeout: 10_000,
-    });
-    res.json(response.data);
+    };
+    if (method === 'get') {
+        config.params = req.query;
+    } else if (['post', 'put', 'patch', 'delete'].includes(method)) {
+        config.data = req.body;
+    }
+
+    const response = await axios(config);
+    res.json(response.data || { ok: true });
   } catch (err) {
     const status = err?.response?.status || 500;
-    res.status(status).json({ message: err?.response?.data?.message || "Failed to fetch book" });
+    res.status(status).json({ message: err?.response?.data?.message || `Failed to proxy ${path}` });
   }
-});
+}
+
+app.get("/api/resources", (req, res) => proxyResource(req, res, "/resources"));
+app.get("/api/resources/:id", (req, res) => proxyResource(req, res, `/resources/${req.params.id}`));
+app.post("/api/resources", (req, res) => proxyResource(req, res, "/resources"));
+app.put("/api/resources/:id", (req, res) => proxyResource(req, res, `/resources/${req.params.id}`));
+app.delete("/api/resources/:id", (req, res) => proxyResource(req, res, `/resources/${req.params.id}`));
+
+// PHYSICAL EXAMPLES
+app.get("/api/resources/:id/examples", (req, res) => proxyResource(req, res, `/resources/${req.params.id}/examples`));
+app.post("/api/resources/:id/examples", (req, res) => proxyResource(req, res, `/resources/${req.params.id}/examples`));
+app.put("/api/resources/:id/examples/:barcode", (req, res) => proxyResource(req, res, `/resources/${req.params.id}/examples/${req.params.barcode}`));
+app.delete("/api/resources/:id/examples/:barcode", (req, res) => proxyResource(req, res, `/resources/${req.params.id}/examples/${req.params.barcode}`));
 
 app.listen(PORT, () => {
   // eslint-disable-next-line no-console
   console.log(`BFF listening on :${PORT}`);
 });
-

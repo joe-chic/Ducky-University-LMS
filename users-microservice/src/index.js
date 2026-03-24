@@ -179,6 +179,10 @@ app.post("/users", authMiddleware, async (req, res) => {
     const created_by = req.auth.userId || 1;
     const latest_modified_by = req.auth.userId || 1;
 
+    // Fix sequences broken by seed data explicitly setting IDs
+    await query(`SELECT setval('users_user_id_seq', COALESCE((SELECT MAX(user_id) FROM users), 1))`);
+    await query(`SELECT setval('users_campus_id_seq', COALESCE((SELECT MAX(campus_id) FROM users), 1000))`);
+
     const insertRes = await query(
       `INSERT INTO users(
         campus_id,
