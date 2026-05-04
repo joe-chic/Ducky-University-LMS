@@ -1,0 +1,260 @@
+.libro-detalle-container {
+  padding: 24px 48px;
+  max-width: 1100px;
+}
+
+.libro-breadcrumb {
+  font-size: 0.9rem;
+  color: #888;
+  margin-bottom: 12px;
+}
+
+.libro-back-btn {
+  background: none;
+  border: none;
+  font-size: 1.4rem;
+  cursor: pointer;
+  color: #333;
+  margin-bottom: 20px;
+  padding: 4px 8px;
+  border-radius: 4px;
+  transition: background 0.2s;
+}
+
+.libro-back-btn:hover {
+  background: #f0f0f0;
+}
+
+.libro-detalle-card {
+  background: white;
+  border-radius: 12px;
+  padding: 32px;
+  box-shadow: 0 2px 12px rgba(0,0,0,0.08);
+}
+
+.libro-detalle-top {
+  display: flex;
+  gap: 32px;
+  margin-bottom: 28px;
+}
+
+/* Portada */
+.libro-portada {
+  flex-shrink: 0;
+  width: 200px;
+}
+
+.libro-portada-placeholder {
+  width: 200px;
+  height: 280px;
+  background: linear-gradient(135deg, #1a1a2e, #2d2d5e);
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: rgba(255,255,255,0.6);
+  font-size: 0.85rem;
+  text-align: center;
+  padding: 12px;
+  text-transform: capitalize;
+}
+
+/* Info principal */
+.libro-info-principal {
+  flex: 1;
+}
+
+.libro-titulo {
+  font-size: 2rem;
+  font-weight: bold;
+  color: #1a1a1a;
+  margin: 0 0 6px 0;
+}
+
+.libro-autor {
+  font-size: 1rem;
+  color: #555;
+  margin: 0 0 14px 0;
+}
+
+/* Tags */
+.libro-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 20px;
+}
+
+.libro-tag {
+  padding: 4px 14px;
+  border-radius: 20px;
+  border: 1px solid #b8860b;
+  color: #b8860b;
+  font-size: 0.85rem;
+  background: #fffbf0;
+}
+
+.libro-divider {
+  border: none;
+  border-top: 1px solid #f0f0f0;
+  margin: 20px 0;
+}
+
+/* Grid de datos */
+.libro-datos-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 16px;
+  margin-top: 16px;
+}
+
+.libro-dato {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.libro-dato-label {
+  font-size: 0.75rem;
+  font-weight: bold;
+  color: #888;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.libro-dato-valor {
+  font-size: 0.95rem;
+  color: #1a1a1a;
+}
+
+/* Sinopsis */
+.libro-sinopsis {
+  margin-bottom: 4px;
+}
+
+.libro-sinopsis h3 {
+  font-size: 1rem;
+  font-weight: bold;
+  color: #555;
+  margin-bottom: 10px;
+}
+
+.libro-sinopsis p {
+  font-size: 0.92rem;
+  color: #444;
+  line-height: 1.7;
+}
+
+/* Ubicación */
+.libro-ubicacion h3 {
+  font-size: 1rem;
+  font-weight: bold;
+  color: #555;
+  margin-bottom: 14px;
+}
+
+.libro-ubicacion-card {
+  display: flex;
+  align-items: flex-start;
+  gap: 16px;
+  border: 1px solid #e0e0e0;
+  border-radius: 8px;
+  padding: 16px 20px;
+  background: #fafafa;
+}
+
+.libro-ubicacion-icon {
+  font-size: 1.8rem;
+  color: #c62828;
+}
+
+.libro-ubicacion-texto {
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: #333;
+  margin: 0 0 8px 0;
+}
+
+.libro-ubicacion-badges {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.libro-badge-disponible {
+  padding: 3px 12px;
+  border-radius: 20px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  background: #e8f5e9;
+  color: #2e7d32;
+  border: 1px solid #a5d6a7;
+}
+
+.libro-badge-prestamo {
+  padding: 3px 12px;
+  border-radius: 20px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  background: #fff3e0;
+  color: #e65100;
+  border: 1px solid #ffcc80;
+}
+
+/* Botones acciones */
+.libro-acciones {
+  display: flex;
+  gap: 14px;
+  flex-wrap: wrap;
+}
+
+.libro-btn-prestamo {
+  padding: 12px 28px;
+  background: #FFD400;
+  color: #1a1a1a;
+  border: 1px solid #e0c000;
+  border-radius: 8px;
+  font-size: 1rem;
+  font-weight: bold;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.libro-btn-prestamo:hover { background: #e6bf00; }
+.libro-btn-prestamo:disabled { background: #ccc; cursor: not-allowed; border-color: #ccc; }
+
+.libro-btn-editar {
+  padding: 12px 28px;
+  background: white;
+  color: #1a1a1a;
+  border: 1px solid #ccc;
+  border-radius: 8px;
+  font-size: 1rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.libro-btn-editar:hover { background: #f5f5f5; }
+
+.libro-btn-deshabilitar {
+  padding: 12px 28px;
+  background: white;
+  color: #c62828;
+  border: 1px solid #ef9a9a;
+  border-radius: 8px;
+  font-size: 1rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.libro-btn-deshabilitar:hover { background: #ffebee; }
+
+@media (max-width: 768px) {
+  .libro-detalle-container { padding: 16px; }
+  .libro-detalle-top { flex-direction: column; }
+  .libro-portada { width: 100%; }
+  .libro-portada-placeholder { width: 100%; height: 200px; }
+  .libro-datos-grid { grid-template-columns: 1fr 1fr; }
+}
