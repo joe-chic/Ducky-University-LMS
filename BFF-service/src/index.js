@@ -166,6 +166,17 @@ app.post("/api/loans", async (req, res) => {
       return res.status(403).json({ message: `El usuario tiene ${unpaidFines.length} multa(s) sin pagar. Debe liquidarlas antes de solicitar un préstamo.` });
     }
 
+    // 3. Verificar que no tenga más de 2 préstamos activos
+    const activeLoansRes = await axios.get(`${LIBRARY_BASE_URL}/loans`, {
+      params: { campus_id, state: "active" },
+      timeout: 10_000,
+    }).catch(() => ({ data: [] }));
+
+    const activeLoans = Array.isArray(activeLoansRes.data) ? activeLoansRes.data : [];
+    if (activeLoans.length >= 2) {
+      return res.status(403).json({ message: `El usuario ya tiene ${activeLoans.length} préstamo(s) activo(s). El máximo permitido es 2.` });
+    }
+
     // 3. Crear el préstamo
     const loanRes = await axios.post(`${LIBRARY_BASE_URL}/loans`, req.body, {
       headers: { "Content-Type": "application/json" },

@@ -1,14 +1,15 @@
 import { useEffect, useState, useCallback } from "react";
-import { useNavigate, useLocation } from "react-router-dom";
-import "./Home.css";
+import { useNavigate } from "react-router-dom";
+import "./Usuarios.css";
 import duckIcon from "../assets/icons/duckIcon.svg";
+import searchIcon from "../assets/icons/searchIcon.svg";
+import updateIcon from "../assets/icons/updateIcon.svg";
+import buttonCirculo from "../assets/icons/Button-circulo.svg";
+import Sidebar from "../components/Sidebar";
 import { bffGet, bffPost, bffPut, getToken } from "../api/bff";
 
 function Libros() {
   const navigate = useNavigate();
-  const location = useLocation();
-  const [sidebarOpen, setSidebarOpen] = useState(false);
-  const [menuUsuarioAbierto, setMenuUsuarioAbierto] = useState(false);
 
   const userRole = localStorage.getItem("ducky_role");
   const campusId = Number(localStorage.getItem("ducky_campus_id") || 0);
@@ -17,6 +18,8 @@ function Libros() {
   const hasManagementRole = isAdmin || isLib;
   const isAlumno = !hasManagementRole;
 
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [menuUsuarioAbierto, setMenuUsuarioAbierto] = useState(false);
   const [recursos, setRecursos] = useState([]);
   const [loading, setLoading] = useState(false);
   const [busqueda, setBusqueda] = useState("");
@@ -113,7 +116,7 @@ function Libros() {
     try {
       const token = getToken();
       const res = await bffPost("/api/loans", { barcode: targetBarcode, campus_id: campusId }, { token });
-      setMsgPrestamo({ type: "success", text: `Préstamo solicitado correctamente (ID: ${res.loan_id}).` });
+      setMsgPrestamo({ type: "success", text: `Préstamo solicitado (ID: ${res.loan_id}).` });
       fetchRecursos();
     } catch (err) {
       setMsgPrestamo({ type: "error", text: err.message || "Error al solicitar el préstamo." });
@@ -137,8 +140,7 @@ function Libros() {
 
   const handleGuardarRecurso = async () => {
     if (!recursoEditando?.titulo || !recursoEditando?.tipo) {
-      alert("Por favor indique el Título y Tipo del recurso.");
-      return;
+      alert("Por favor indique el Título y Tipo del recurso."); return;
     }
     try {
       const token = getToken();
@@ -191,31 +193,10 @@ function Libros() {
 
   const totalPages = Math.ceil(total / pageSize);
 
-  const alertStyle = (type) => ({
-    padding: "12px 16px", borderRadius: "8px", marginBottom: "16px",
-    background: type === "success" ? "#e8f5e9" : "#ffebee",
-    color: type === "success" ? "#2e7d32" : "#c62828",
-    border: `1px solid ${type === "success" ? "#a5d6a7" : "#ef9a9a"}`,
-    fontWeight: 500
-  });
-
   return (
-    <div className="home-container">
+    <div className="usuarios-container">
 
-      {/* Sidebar */}
-      <div className={`sidebar ${sidebarOpen ? "sidebar-open" : "sidebar-closed"}`}>
-        {sidebarOpen && (
-          <div className="sidebar-menu">
-            <div className={`sidebar-item ${location.pathname === '/home' ? 'active' : ''}`} onClick={() => navigate("/home")}>Inicio</div>
-            {isAdmin && <div className={`sidebar-item ${location.pathname.includes('/usuarios') ? 'active' : ''}`} onClick={() => navigate("/usuarios")}>Usuarios</div>}
-            <div className={`sidebar-item ${location.pathname.includes('/libros') ? 'active' : ''}`} onClick={() => navigate("/libros")}>Libros</div>
-            {hasManagementRole && <div className={`sidebar-item ${location.pathname === '/prestamos' ? 'active' : ''}`} onClick={() => navigate("/prestamos")}>Prestamos</div>}
-            {!hasManagementRole && <div className={`sidebar-item ${location.pathname === '/mis-prestamos' ? 'active' : ''}`} onClick={() => navigate("/mis-prestamos")}>Mis Prestamos</div>}
-            {!hasManagementRole && <div className={`sidebar-item ${location.pathname === '/devoluciones' ? 'active' : ''}`} onClick={() => navigate("/devoluciones")}>Devoluciones</div>}
-            {!hasManagementRole && <div className={`sidebar-item ${location.pathname === '/soporte' ? 'active' : ''}`} onClick={() => navigate("/soporte")}>Soporte</div>}
-          </div>
-        )}
-      </div>
+      <Sidebar isOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} />
 
       <div className="main-content">
 
@@ -245,284 +226,292 @@ function Libros() {
           </div>
         </nav>
 
-        {/* Contenido */}
-        <div style={{ padding: "24px 32px" }}>
+        {/* Contenido — mismo layout que Usuarios */}
+        <div className="usuarios-content">
 
-          {/* Búsqueda */}
-          <div style={{ marginBottom: "20px" }}>
-            <div style={{ position: "relative" }}>
-              <span style={{ position: "absolute", left: "14px", top: "50%", transform: "translateY(-50%)", color: "#aaa" }}>🔍</span>
+          <div className="usuarios-main">
+
+            {/* Barra de búsqueda — igual que Usuarios */}
+            <div className="search-bar">
+              <img src={searchIcon} alt="buscar" className="search-icon-img" />
               <input
+                type="text"
+                placeholder="Buscar libros, géneros, autores..."
                 value={busqueda}
                 onChange={e => { setBusqueda(e.target.value); setPage(1); }}
-                placeholder="Buscar libros, géneros, autores..."
-                style={{ width: "100%", padding: "12px 14px 12px 40px", border: "1px solid #ddd", borderRadius: "8px", fontSize: "0.95rem", outline: "none", boxSizing: "border-box" }}
+                className="search-input"
               />
-              {busqueda && (
-                <button onClick={() => { setBusqueda(""); setPage(1); }} style={{ position: "absolute", right: "14px", top: "50%", transform: "translateY(-50%)", background: "none", border: "none", cursor: "pointer", color: "#aaa", fontSize: "1.1rem" }}>✕</button>
-              )}
             </div>
-          </div>
 
-          {msgPrestamo && (
-            <div style={alertStyle(msgPrestamo.type)}>
-              {msgPrestamo.text}
-              <button onClick={() => setMsgPrestamo(null)} style={{ float: "right", background: "none", border: "none", cursor: "pointer", fontWeight: "bold" }}>✕</button>
-            </div>
-          )}
+            {/* Mensaje préstamo */}
+            {msgPrestamo && (
+              <div style={{ padding: "10px 14px", borderRadius: "8px", background: msgPrestamo.type === "success" ? "#e8f5e9" : "#ffebee", color: msgPrestamo.type === "success" ? "#2e7d32" : "#c62828", border: `1px solid ${msgPrestamo.type === "success" ? "#a5d6a7" : "#ef9a9a"}`, fontWeight: 500, fontSize: "0.9rem" }}>
+                {msgPrestamo.text}
+                <button onClick={() => setMsgPrestamo(null)} style={{ float: "right", background: "none", border: "none", cursor: "pointer", fontWeight: "bold" }}>✕</button>
+              </div>
+            )}
 
-          <div style={{ display: "flex", gap: "24px", alignItems: "flex-start" }}>
-
-            {/* Lista de libros */}
-            <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: "10px" }}>
+            {/* Lista de libros — misma estructura que lista de usuarios */}
+            <div className="usuarios-lista">
               {loading ? (
                 <div style={{ textAlign: "center", padding: "40px", color: "#666" }}>Cargando...</div>
               ) : recursos.length === 0 ? (
-                <div style={{ textAlign: "center", padding: "40px", color: "#999", background: "#fafafa", borderRadius: "8px", border: "1px solid #eee" }}>No se encontraron recursos.</div>
+                <div style={{ textAlign: "center", padding: "40px", color: "#999" }}>No se encontraron recursos.</div>
               ) : (
                 recursos.map(recurso => (
                   <div
+                    className="usuario-card"
                     key={recurso.id}
-                    style={{ display: "flex", alignItems: "center", gap: "16px", background: "white", border: "1px solid #e0e0e0", borderRadius: "8px", padding: "14px 16px", cursor: "pointer", transition: "box-shadow 0.2s" }}
                     onClick={() => navigate(`/libros/${recurso.id}`)}
-                    onMouseEnter={e => e.currentTarget.style.boxShadow = "0 4px 12px rgba(0,0,0,0.1)"}
-                    onMouseLeave={e => e.currentTarget.style.boxShadow = "none"}
+                    style={{ cursor: "pointer" }}
                   >
-                    {/* Portada */}
-                    <div style={{ width: "52px", height: "68px", background: "linear-gradient(135deg, #1a1a2e, #2d2d5e)", borderRadius: "4px", flexShrink: 0 }} />
+                    {/* Portada — mismo tamaño que avatar */}
+                    <div className="usuario-avatar" style={{ width: "56px", height: "72px", background: "linear-gradient(135deg, #1a1a2e, #2d2d5e)", borderRadius: "6px", border: "1px solid #212529", flexShrink: 0 }} />
 
-                    {/* Info */}
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "3px", flexWrap: "wrap" }}>
-                        <span style={{ fontWeight: "bold", fontSize: "0.95rem", color: "#1a1a1a" }}>{recurso.titulo}</span>
-                        <span style={{ padding: "2px 10px", borderRadius: "20px", fontSize: "0.72rem", fontWeight: "bold", background: recurso.disponible ? "#e8f5e9" : "#ffebee", color: recurso.disponible ? "#2e7d32" : "#c62828", border: `1px solid ${recurso.disponible ? "#a5d6a7" : "#ef9a9a"}`, whiteSpace: "nowrap" }}>
-                          {recurso.disponible ? "Disponible" : "No disponible"}
-                        </span>
-                      </div>
-                      <p style={{ color: "#555", fontSize: "0.82rem", margin: "0 0 2px" }}>{recurso.autor || "Autor Desconocido"}</p>
-                      <p style={{ color: "#888", fontSize: "0.78rem", margin: 0 }}>{recurso.editorial || ""}{recurso.genero ? ` · ${recurso.genero}` : ""}</p>
+                    {/* Info — mismo estilo que usuario-info */}
+                    <div className="usuario-info">
+                      <p className="usuario-nombre">{recurso.titulo}</p>
+                      <p className="usuario-rol" style={{ textTransform: "capitalize" }}>{recurso.tipo?.replace(/_/g, " ")}</p>
+                      <p className="usuario-correo">{recurso.autor || "Autor Desconocido"}</p>
+                      <p className="usuario-telefono">{recurso.editorial || ""}{recurso.genero ? ` · ${recurso.genero}` : ""}</p>
                     </div>
 
-                    {/* Botones */}
-                    <div style={{ display: "flex", flexDirection: "column", gap: "6px", flexShrink: 0 }} onClick={e => e.stopPropagation()}>
+                    {/* Acciones — misma estructura que usuario-actions */}
+                    <div className="usuario-actions" onClick={e => e.stopPropagation()}>
+                      <span className="badge-activo" style={{ background: recurso.disponible ? "#2E8B57" : "#aa0000" }}>
+                        {recurso.disponible ? "Disponible" : "No disponible"}
+                      </span>
+
                       {isAlumno && recurso.disponible && (
-                        <button
-                          onClick={e => handleSolicitarPrestamo(recurso, e)}
-                          disabled={loadingPrestamo}
-                          style={{ padding: "6px 14px", background: "#FFD400", color: "#1a1a1a", border: "1px solid #e0c000", borderRadius: "6px", fontWeight: "600", cursor: "pointer", fontSize: "0.82rem", whiteSpace: "nowrap" }}
-                        >
+                        <button className="btn-action" onClick={e => handleSolicitarPrestamo(recurso, e)} disabled={loadingPrestamo}>
                           Solicitar Préstamo
                         </button>
                       )}
+
                       {hasManagementRole && (
-                        <button
-                          onClick={e => { e.stopPropagation(); setRecursoEditando({ ...recurso }); setModalRecursoAbierto(true); }}
-                          style={{ padding: "6px 14px", background: "white", color: "#1a1a1a", border: "1px solid #FFD400", borderRadius: "6px", fontWeight: "600", cursor: "pointer", fontSize: "0.82rem" }}
-                        >
-                          ✏️ Editar
-                        </button>
+                        <>
+                          <button className="btn-action" onClick={e => { e.stopPropagation(); setRecursoEditando({ ...recurso }); setModalRecursoAbierto(true); }}>
+                            <img src={updateIcon} alt="editar" className="btn-icon" /> Editar
+                          </button>
+                          <button className="btn-action" onClick={e => handleToggleEstado(recurso, e)}>
+                            <span style={{ marginRight: "4px", fontSize: "14px" }}>{recurso.disponible ? "🚫" : "✅"}</span>
+                            {recurso.disponible ? "Deshabilitar" : "Habilitar"}
+                          </button>
+                          {recurso.tipo === "book" && (
+                            <button className="btn-action" onClick={e => abrirEjemplares(recurso, e)}>
+                              Ejemplares
+                            </button>
+                          )}
+                        </>
                       )}
-                      <button
-                        onClick={e => { e.stopPropagation(); navigate(`/libros/${recurso.id}`); }}
-                        style={{ padding: "6px 14px", background: "white", color: "#555", border: "1px solid #e0e0e0", borderRadius: "6px", fontWeight: "600", cursor: "pointer", fontSize: "0.82rem" }}
-                      >
+
+                      <button className="btn-action" onClick={e => { e.stopPropagation(); navigate(`/libros/${recurso.id}`); }}>
                         Busqueda
                       </button>
                     </div>
                   </div>
                 ))
               )}
-
-              {totalPages > 1 && (
-                <div className="pagination">
-                  <button className="page-btn" disabled={page === 1} onClick={() => setPage(page - 1)}>Anterior</button>
-                  <span>Página {page} de {totalPages}</span>
-                  <button className="page-btn" disabled={page === totalPages} onClick={() => setPage(page + 1)}>Siguiente</button>
-                </div>
-              )}
             </div>
 
-            {/* Panel filtros */}
-            <div style={{ width: "200px", flexShrink: 0, background: "white", border: "1px solid #e0e0e0", borderRadius: "8px", padding: "18px" }}>
-              <h3 style={{ fontWeight: "bold", fontSize: "1rem", marginBottom: "14px", textAlign: "center" }}>Filtrar Libros</h3>
+            {/* Paginación — igual que Usuarios */}
+            {totalPages > 1 && (
+              <div className="paginacion">
+                <button className="pag-btn" onClick={() => setPage(1)} disabled={page === 1}>«</button>
+                <button className="pag-btn" onClick={() => setPage(p => p - 1)} disabled={page === 1}>‹</button>
+                {Array.from({ length: totalPages }, (_, i) => i + 1).map(num => (
+                  <button key={num} className={`pag-btn ${page === num ? "pag-activa" : ""}`} onClick={() => setPage(num)}>{num}</button>
+                ))}
+                <button className="pag-btn" onClick={() => setPage(p => p + 1)} disabled={page === totalPages}>›</button>
+                <button className="pag-btn" onClick={() => setPage(totalPages)} disabled={page === totalPages}>»</button>
+              </div>
+            )}
+          </div>
 
-              {[
-                { label: "Idioma", key: "lenguaje", options: metadata.languages.map(l => l.name) },
-                { label: "Categoría", key: "categoria", options: metadata.categories.map(c => c.name) },
-                { label: "Autor", key: "autor", options: metadata.authors.map(a => a.name) },
-                { label: "Editorial", key: "editorial", options: metadata.publishers.map(p => p.name) },
-              ].map(f => (
-                <div key={f.key} style={{ marginBottom: "10px" }}>
-                  <select
-                    value={filtros[f.key]}
-                    onChange={e => { setFiltros(prev => ({ ...prev, [f.key]: e.target.value })); setPage(1); }}
-                    style={{ width: "100%", padding: "7px 10px", border: "1px solid #ddd", borderRadius: "6px", fontSize: "0.85rem", background: "#fafafa" }}
-                  >
-                    <option value="">{f.label}</option>
-                    {f.options.map(o => <option key={o} value={o}>{o}</option>)}
-                  </select>
-                </div>
-              ))}
+          {/* Panel filtros — misma clase y estilo que panel de permisos */}
+          <div className="permisos-panel">
+            <h3 className="permisos-title">Filtrar Libros</h3>
+            <hr />
 
-              <div style={{ marginBottom: "10px" }}>
+            {[
+              { label: "Idioma", key: "lenguaje", options: metadata.languages.map(l => l.name) },
+              { label: "Categoría", key: "categoria", options: metadata.categories.map(c => c.name) },
+              { label: "Autor", key: "autor", options: metadata.authors.map(a => a.name) },
+              { label: "Editorial", key: "editorial", options: metadata.publishers.map(p => p.name) },
+            ].map(f => (
+              <div key={f.key} style={{ marginTop: "10px" }}>
                 <select
-                  value={filtros.anio}
-                  onChange={e => { setFiltros(prev => ({ ...prev, anio: e.target.value })); setPage(1); }}
-                  style={{ width: "100%", padding: "7px 10px", border: "1px solid #ddd", borderRadius: "6px", fontSize: "0.85rem", background: "#fafafa" }}
+                  value={filtros[f.key]}
+                  onChange={e => { setFiltros(prev => ({ ...prev, [f.key]: e.target.value })); setPage(1); }}
+                  className="permiso-rol-header"
+                  style={{ width: "100%", cursor: "pointer", background: "#F8F9FA", fontSize: "14px", border: "1px solid #212529", borderRadius: "5px", padding: "4px 8px" }}
                 >
-                  <option value="">Año</option>
-                  {[2024,2023,2022,2021,2020,2019,2018,2015,2010,2005,2000].map(y => <option key={y} value={y}>{y}</option>)}
+                  <option value="">{f.label}</option>
+                  {f.options.map(o => <option key={o} value={o}>{o}</option>)}
                 </select>
               </div>
+            ))}
 
-              {Object.values(filtros).some(v => v) && (
+            <div style={{ marginTop: "10px" }}>
+              <select
+                value={filtros.anio}
+                onChange={e => { setFiltros(prev => ({ ...prev, anio: e.target.value })); setPage(1); }}
+                className="permiso-rol-header"
+                style={{ width: "100%", cursor: "pointer", background: "#F8F9FA", fontSize: "14px", border: "1px solid #212529", borderRadius: "5px", padding: "4px 8px" }}
+              >
+                <option value="">Año</option>
+                {[2024,2023,2022,2021,2020,2019,2018,2015,2010,2005,2000].map(y => (
+                  <option key={y} value={y}>{y}</option>
+                ))}
+              </select>
+            </div>
+
+            {Object.values(filtros).some(v => v) && (
+              <div style={{ marginTop: "10px" }}>
                 <button
                   onClick={() => { setFiltros({ lenguaje: "", categoria: "", autor: "", editorial: "", anio: "" }); setPage(1); }}
-                  style={{ width: "100%", padding: "7px", background: "#f5f5f5", border: "1px solid #ddd", borderRadius: "6px", cursor: "pointer", fontSize: "0.82rem", color: "#555" }}
+                  className="btn-cancelar"
+                  style={{ width: "100%", fontSize: "12px" }}
                 >
                   Limpiar filtros
                 </button>
-              )}
-            </div>
+              </div>
+            )}
           </div>
         </div>
-      </div>
 
-      {/* Botón + flotante */}
-      {hasManagementRole && (
-        <button
-          onClick={() => { setRecursoEditando({ titulo: "", tipo: "book", disponible: true, autor_id: "", editorial_id: "", generos_ids: [], lenguajes_ids: [], isbn: "", edicion: "", sinopsis: "", costo: 0, ano_publicacion: "" }); setModalRecursoAbierto(true); }}
-          style={{ position: "fixed", bottom: "32px", right: "32px", width: "56px", height: "56px", borderRadius: "50%", background: "#FFD400", border: "none", fontSize: "28px", cursor: "pointer", boxShadow: "0 4px 12px rgba(0,0,0,0.2)", zIndex: 100, display: "flex", alignItems: "center", justifyContent: "center" }}
-        >
-          +
-        </button>
-      )}
+        {/* Botón + flotante — igual que Usuarios */}
+        {hasManagementRole && (
+          <button
+            className="btn-flotante"
+            onClick={() => { setRecursoEditando({ titulo: "", tipo: "book", disponible: true, autor_id: "", editorial_id: "", generos_ids: [], lenguajes_ids: [], isbn: "", edicion: "", sinopsis: "", costo: 0, ano_publicacion: "" }); setModalRecursoAbierto(true); }}
+          >
+            <img src={buttonCirculo} alt="agregar" className="btn-flotante-icon" />
+          </button>
+        )}
 
-      {/* Modal Editar/Agregar Recurso */}
-      {modalRecursoAbierto && (
-        <div className="modal-overlay" onClick={() => setModalRecursoAbierto(false)}>
-          <div className="modal-card" style={{ maxWidth: "860px", width: "90vw" }} onClick={e => e.stopPropagation()}>
-            <button className="modal-cerrar" onClick={() => setModalRecursoAbierto(false)}>✕</button>
-            <div className="modal-header">
-              <h2 className="modal-titulo">{recursoEditando?.id ? "Editar Información del Recurso" : "Registrar Nuevo Recurso"}</h2>
-            </div>
-            <div className="modal-form" style={{ maxHeight: "72vh", overflowY: "auto", paddingRight: "10px" }}>
-              <label className="detail-label">Título *</label>
-              <input type="text" value={recursoEditando?.titulo || ""} onChange={e => setRecursoEditando({ ...recursoEditando, titulo: e.target.value })} className="modal-input" />
-
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "15px" }}>
-                <div>
-                  <label className="detail-label">Tipo *</label>
-                  <select className="modal-input" value={recursoEditando?.tipo || "book"} onChange={e => setRecursoEditando({ ...recursoEditando, tipo: e.target.value })}>
-                    <option value="book">Book</option>
-                    <option value="journal_magazine">Journal / Magazine</option>
-                    <option value="thesis_dissertation">Thesis / Dissertation</option>
-                    <option value="reference">Reference</option>
-                    <option value="digital_article">Digital Article</option>
-                    <option value="e_book">E-Book</option>
-                    <option value="video">Video</option>
-                    <option value="audio_music">Audio / Music</option>
-                  </select>
-                </div>
-                <div>
-                  <label className="detail-label">Autor</label>
-                  <select className="modal-input" value={recursoEditando?.autor_id || ""} onChange={e => setRecursoEditando({ ...recursoEditando, autor_id: e.target.value ? Number(e.target.value) : "" })}>
-                    <option value="">Desconocido...</option>
-                    {metadata.authors.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
-                  </select>
-                </div>
-                <div>
-                  <label className="detail-label">Editorial</label>
-                  <select className="modal-input" value={recursoEditando?.editorial_id || ""} onChange={e => setRecursoEditando({ ...recursoEditando, editorial_id: e.target.value ? Number(e.target.value) : "" })}>
-                    <option value="">Desconocida...</option>
-                    {metadata.publishers.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
-                  </select>
-                </div>
-                <div>
-                  <label className="detail-label">Año</label>
-                  <input type="number" value={recursoEditando?.ano_publicacion || ""} onChange={e => setRecursoEditando({ ...recursoEditando, ano_publicacion: Number(e.target.value) })} className="modal-input" />
-                </div>
+        {/* Modal Agregar/Editar */}
+        {modalRecursoAbierto && (
+          <div className="modal-overlay" onClick={() => setModalRecursoAbierto(false)}>
+            <div className="modal-card" style={{ maxWidth: "860px", width: "90vw" }} onClick={e => e.stopPropagation()}>
+              <button className="modal-cerrar" onClick={() => setModalRecursoAbierto(false)}>✕</button>
+              <div className="modal-header">
+                <h2 className="modal-titulo">{recursoEditando?.id ? "Editar Recurso" : "Registrar Nuevo Recurso"}</h2>
               </div>
-
-              {recursoEditando?.tipo === "book" && (
-                <div style={{ background: "#fffde7", padding: "15px", borderRadius: "5px", marginTop: "10px", marginBottom: "15px", border: "1px dashed #FFD400" }}>
-                  <h4 style={{ marginBottom: "10px", color: "#666" }}>Metadata del Libro</h4>
-                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px" }}>
-                    <input type="text" placeholder="ISBN" className="modal-input" value={recursoEditando?.isbn || ""} onChange={e => setRecursoEditando({ ...recursoEditando, isbn: e.target.value })} />
-                    <input type="number" placeholder="Edición" className="modal-input" value={recursoEditando?.edicion || ""} onChange={e => setRecursoEditando({ ...recursoEditando, edicion: Number(e.target.value) })} />
-                    <textarea placeholder="Sinópsis..." className="modal-input" style={{ gridColumn: "span 2", minHeight: "60px" }} value={recursoEditando?.sinopsis || ""} onChange={e => setRecursoEditando({ ...recursoEditando, sinopsis: e.target.value })} />
+              <div className="modal-form" style={{ maxHeight: "72vh", overflowY: "auto", paddingRight: "10px" }}>
+                <label className="detail-label">Título *</label>
+                <input type="text" value={recursoEditando?.titulo || ""} onChange={e => setRecursoEditando({ ...recursoEditando, titulo: e.target.value })} className="modal-input" />
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "15px" }}>
+                  <div>
+                    <label className="detail-label">Tipo *</label>
+                    <select className="modal-input" value={recursoEditando?.tipo || "book"} onChange={e => setRecursoEditando({ ...recursoEditando, tipo: e.target.value })}>
+                      <option value="book">Book</option>
+                      <option value="journal_magazine">Journal / Magazine</option>
+                      <option value="thesis_dissertation">Thesis / Dissertation</option>
+                      <option value="reference">Reference</option>
+                      <option value="digital_article">Digital Article</option>
+                      <option value="e_book">E-Book</option>
+                      <option value="video">Video</option>
+                      <option value="audio_music">Audio / Music</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="detail-label">Autor</label>
+                    <select className="modal-input" value={recursoEditando?.autor_id || ""} onChange={e => setRecursoEditando({ ...recursoEditando, autor_id: e.target.value ? Number(e.target.value) : "" })}>
+                      <option value="">Desconocido...</option>
+                      {metadata.authors.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="detail-label">Editorial</label>
+                    <select className="modal-input" value={recursoEditando?.editorial_id || ""} onChange={e => setRecursoEditando({ ...recursoEditando, editorial_id: e.target.value ? Number(e.target.value) : "" })}>
+                      <option value="">Desconocida...</option>
+                      {metadata.publishers.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="detail-label">Año</label>
+                    <input type="number" value={recursoEditando?.ano_publicacion || ""} onChange={e => setRecursoEditando({ ...recursoEditando, ano_publicacion: Number(e.target.value) })} className="modal-input" />
                   </div>
                 </div>
-              )}
-
-              <label className="detail-label">Géneros</label>
-              <div className="checkbox-group">
-                {metadata.categories.map(c => (
-                  <label key={c.id}><input type="checkbox" checked={(recursoEditando?.generos_ids || []).includes(c.id)} onChange={e => toggleGenero(c.id, e.target.checked)} /> {c.name}</label>
-                ))}
-              </div>
-
-              <label className="detail-label">Lenguajes</label>
-              <div className="checkbox-group">
-                {metadata.languages.map(l => (
-                  <label key={l.id}><input type="checkbox" checked={(recursoEditando?.lenguajes_ids || []).includes(l.id)} onChange={e => toggleLenguaje(l.id, e.target.checked)} /> {l.name}</label>
-                ))}
-              </div>
-
-              <label style={{ display: "flex", alignItems: "center", gap: "10px", marginTop: "10px", cursor: "pointer", fontWeight: "bold", background: "#f0f0f0", padding: "10px", borderRadius: "5px" }}>
-                <input type="checkbox" checked={recursoEditando?.disponible ?? true} onChange={e => setRecursoEditando({ ...recursoEditando, disponible: e.target.checked })} />
-                Marcar como Visible/Disponible al Público
-              </label>
-            </div>
-            <div className="modal-botones" style={{ marginTop: "20px" }}>
-              <button className="modal-cancelar" onClick={() => setModalRecursoAbierto(false)}>Cancelar</button>
-              <button className="modal-confirmar" onClick={handleGuardarRecurso}>Guardar Cambios BD</button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Modal Ejemplares */}
-      {modalEjemplaresAbierto && recursoActivo && (
-        <div className="modal-overlay" onClick={() => setModalEjemplaresAbierto(false)}>
-          <div className="modal-card" style={{ maxWidth: "600px" }} onClick={e => e.stopPropagation()}>
-            <button className="modal-cerrar" onClick={() => setModalEjemplaresAbierto(false)}>✕</button>
-            <div className="modal-header">
-              <h2 className="modal-titulo">Ejemplares Físicos</h2>
-              <p style={{ margin: 0, color: "#666" }}>{recursoActivo.titulo}</p>
-            </div>
-            <div className="modal-form" style={{ maxHeight: "350px", overflowY: "auto" }}>
-              <table style={{ width: "100%", textAlign: "left", borderCollapse: "collapse", marginBottom: "15px", fontSize: "14px" }}>
-                <thead><tr style={{ borderBottom: "1px solid #ddd" }}><th>Barcode</th><th>Ubicación</th><th>Salud</th><th>Estado</th><th></th></tr></thead>
-                <tbody>
-                  {ejemplares.length === 0 ? (
-                    <tr><td colSpan="5" style={{ padding: "10px", textAlign: "center", color: "#888" }}>Sin ejemplares</td></tr>
-                  ) : ejemplares.map(ej => (
-                    <tr key={ej.barcode} style={{ borderBottom: "1px solid #eee" }}>
-                      <td style={{ padding: "6px 0" }}>{ej.barcode}</td>
-                      <td>{ej.example_location_code}</td>
-                      <td>{ej.example_health_state}</td>
-                      <td>{ej.example_op_state}</td>
-                      <td><button style={{ color: "red", border: "none", background: "none", cursor: "pointer" }}>🗑️</button></td>
-                    </tr>
+                {recursoEditando?.tipo === "book" && (
+                  <div style={{ background: "#fffde7", padding: "15px", borderRadius: "5px", marginTop: "10px", marginBottom: "10px", border: "1px dashed #FFD400" }}>
+                    <h4 style={{ marginBottom: "10px", color: "#666" }}>Metadata del Libro</h4>
+                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px" }}>
+                      <input type="text" placeholder="ISBN" className="modal-input" value={recursoEditando?.isbn || ""} onChange={e => setRecursoEditando({ ...recursoEditando, isbn: e.target.value })} />
+                      <input type="number" placeholder="Edición" className="modal-input" value={recursoEditando?.edicion || ""} onChange={e => setRecursoEditando({ ...recursoEditando, edicion: Number(e.target.value) })} />
+                      <textarea placeholder="Sinópsis..." className="modal-input" style={{ gridColumn: "span 2", minHeight: "60px" }} value={recursoEditando?.sinopsis || ""} onChange={e => setRecursoEditando({ ...recursoEditando, sinopsis: e.target.value })} />
+                    </div>
+                  </div>
+                )}
+                <label className="detail-label">Géneros</label>
+                <div className="checkbox-group">
+                  {metadata.categories.map(c => (
+                    <label key={c.id}><input type="checkbox" checked={(recursoEditando?.generos_ids || []).includes(c.id)} onChange={e => toggleGenero(c.id, e.target.checked)} /> {c.name}</label>
                   ))}
-                </tbody>
-              </table>
-              <div style={{ background: "#f9f9f9", padding: "15px", borderRadius: "5px", display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px" }}>
-                <input type="text" placeholder="Código de Barras *" className="modal-input" style={{ margin: 0 }} value={nuevoEjemplar.barcode} onChange={e => setNuevoEjemplar({ ...nuevoEjemplar, barcode: e.target.value })} />
-                <input type="text" placeholder="Ubicación *" className="modal-input" style={{ margin: 0 }} value={nuevoEjemplar.location_code} onChange={e => setNuevoEjemplar({ ...nuevoEjemplar, location_code: e.target.value })} />
-                <select className="modal-input" style={{ margin: 0 }} value={nuevoEjemplar.health_state} onChange={e => setNuevoEjemplar({ ...nuevoEjemplar, health_state: e.target.value })}>
-                  <option value="good">Good</option><option value="damaged">Damaged</option><option value="incomplete">Incomplete</option><option value="lost">Lost</option>
-                </select>
-                <select className="modal-input" style={{ margin: 0 }} value={nuevoEjemplar.op_state} onChange={e => setNuevoEjemplar({ ...nuevoEjemplar, op_state: e.target.value })}>
-                  <option value="available">Available</option><option value="on loan">On Loan</option><option value="reserved">Reserved</option>
-                </select>
-                <button style={{ gridColumn: "span 2", padding: "10px" }} className="modal-confirmar" onClick={handleCrearEjemplar}>Agregar Ejemplar</button>
+                </div>
+                <label className="detail-label">Lenguajes</label>
+                <div className="checkbox-group">
+                  {metadata.languages.map(l => (
+                    <label key={l.id}><input type="checkbox" checked={(recursoEditando?.lenguajes_ids || []).includes(l.id)} onChange={e => toggleLenguaje(l.id, e.target.checked)} /> {l.name}</label>
+                  ))}
+                </div>
+                <label style={{ display: "flex", alignItems: "center", gap: "10px", marginTop: "10px", cursor: "pointer", fontWeight: "bold", background: "#f0f0f0", padding: "10px", borderRadius: "5px" }}>
+                  <input type="checkbox" checked={recursoEditando?.disponible ?? true} onChange={e => setRecursoEditando({ ...recursoEditando, disponible: e.target.checked })} />
+                  Marcar como Visible/Disponible al Público
+                </label>
+              </div>
+              <div className="modal-botones" style={{ marginTop: "20px" }}>
+                <button className="modal-cancelar" onClick={() => setModalRecursoAbierto(false)}>Cancelar</button>
+                <button className="modal-confirmar" onClick={handleGuardarRecurso}>Guardar Cambios</button>
               </div>
             </div>
           </div>
-        </div>
-      )}
+        )}
+
+        {/* Modal Ejemplares */}
+        {modalEjemplaresAbierto && recursoActivo && (
+          <div className="modal-overlay" onClick={() => setModalEjemplaresAbierto(false)}>
+            <div className="modal-card" style={{ maxWidth: "600px", width: "90vw" }} onClick={e => e.stopPropagation()}>
+              <button className="modal-cerrar" onClick={() => setModalEjemplaresAbierto(false)}>✕</button>
+              <div className="modal-header">
+                <h2 className="modal-titulo">Ejemplares Físicos</h2>
+              </div>
+              <p style={{ color: "#666", margin: "-10px 0 10px" }}>{recursoActivo.titulo}</p>
+              <div style={{ maxHeight: "300px", overflowY: "auto" }}>
+                <table style={{ width: "100%", textAlign: "left", borderCollapse: "collapse", marginBottom: "15px", fontSize: "14px" }}>
+                  <thead><tr style={{ borderBottom: "1px solid #ddd" }}><th>Barcode</th><th>Ubicación</th><th>Salud</th><th>Estado</th><th></th></tr></thead>
+                  <tbody>
+                    {ejemplares.length === 0 ? (
+                      <tr><td colSpan="5" style={{ padding: "10px", textAlign: "center", color: "#888" }}>Sin ejemplares</td></tr>
+                    ) : ejemplares.map(ej => (
+                      <tr key={ej.barcode} style={{ borderBottom: "1px solid #eee" }}>
+                        <td style={{ padding: "6px 0" }}>{ej.barcode}</td>
+                        <td>{ej.example_location_code}</td>
+                        <td>{ej.example_health_state}</td>
+                        <td>{ej.example_op_state}</td>
+                        <td><button style={{ color: "red", border: "none", background: "none", cursor: "pointer" }}>🗑️</button></td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+                <div style={{ background: "#f9f9f9", padding: "15px", borderRadius: "5px", display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px" }}>
+                  <input type="text" placeholder="Código de Barras *" className="modal-input" style={{ margin: 0 }} value={nuevoEjemplar.barcode} onChange={e => setNuevoEjemplar({ ...nuevoEjemplar, barcode: e.target.value })} />
+                  <input type="text" placeholder="Ubicación *" className="modal-input" style={{ margin: 0 }} value={nuevoEjemplar.location_code} onChange={e => setNuevoEjemplar({ ...nuevoEjemplar, location_code: e.target.value })} />
+                  <select className="modal-input" style={{ margin: 0 }} value={nuevoEjemplar.health_state} onChange={e => setNuevoEjemplar({ ...nuevoEjemplar, health_state: e.target.value })}>
+                    <option value="good">Good</option><option value="damaged">Damaged</option><option value="incomplete">Incomplete</option><option value="lost">Lost</option>
+                  </select>
+                  <select className="modal-input" style={{ margin: 0 }} value={nuevoEjemplar.op_state} onChange={e => setNuevoEjemplar({ ...nuevoEjemplar, op_state: e.target.value })}>
+                    <option value="available">Available</option><option value="on loan">On Loan</option><option value="reserved">Reserved</option>
+                  </select>
+                  <button style={{ gridColumn: "span 2", padding: "10px" }} className="modal-confirmar" onClick={handleCrearEjemplar}>Agregar Ejemplar</button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+      </div>
     </div>
   );
 }

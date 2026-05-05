@@ -41,7 +41,7 @@
 }
 
 .tab-btn.active {
-  background: #b8860b;
+  background: #FFD400;
   color: white;
   box-shadow: 0 2px 8px rgba(184,134,11,0.3);
 }
@@ -52,7 +52,6 @@
   border-radius: 14px;
   padding: 28px;
   box-shadow: 0 2px 12px rgba(0,0,0,0.08);
-  max-width: 520px;
   margin-bottom: 32px;
 }
 
@@ -87,14 +86,14 @@
 
 .form-group input:focus, .form-group select:focus {
   outline: none;
-  border-color: #b8860b;
+  border-color: #FFD400;
   background: white;
 }
 
 .btn-primary {
   width: 100%;
   padding: 12px;
-  background: #b8860b;
+  background: #FFD400;
   color: white;
   border: none;
   border-radius: 9px;
@@ -105,7 +104,7 @@
   margin-top: 6px;
 }
 
-.btn-primary:hover { background: #9a6f09; }
+.btn-primary:hover { background: #e6c200; }
 .btn-primary:disabled { background: #ccc; cursor: not-allowed; }
 
 .alert {
@@ -143,7 +142,7 @@
   background: #fafafa;
 }
 
-.search-bar:focus { outline: none; border-color: #b8860b; }
+.search-bar:focus { outline: none; border-color: #FFD400; }
 
 table {
   width: 100%;
@@ -189,7 +188,7 @@ tbody td { padding: 11px 14px; color: #333; }
   font-size: 0.95rem;
 }
 
-.loading { text-align: center; padding: 30px; color: #b8860b; font-weight: 600; }
+.loading { text-align: center; padding: 30px; color: #FFD400; font-weight: 600; }
 
 /* Sidebar y navbar (copiado de Home.css para uso en Prestamos) */
 .home-container { display: flex; min-height: 100vh; }

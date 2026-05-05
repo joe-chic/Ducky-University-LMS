@@ -3,6 +3,7 @@ import { useNavigate, useLocation, useParams } from "react-router-dom";
 import "./Home.css";
 import "./LibroDetalle.css";
 import duckIcon from "../assets/icons/duckIcon.svg";
+import Sidebar from "../components/Sidebar";
 import { bffGet, bffPut, bffPost, getToken } from "../api/bff";
 
 function LibroDetalle() {
@@ -60,8 +61,8 @@ function LibroDetalle() {
         setEjemplares([]);
       }
     } catch (err) {
-      console.error("Error loading book:", err);
-      setMsg({ type: "error", text: err.message || "No se pudo cargar la información del libro." });
+      console.error(err);
+      setMsg({ type: "error", text: "No se pudo cargar la información del libro." });
       setLibro(null);
     } finally {
       setLoading(false);
@@ -130,7 +131,7 @@ function LibroDetalle() {
       setLibro(prev => ({ ...prev, disponible: !prev.disponible }));
       setMsg({ type: "success", text: `Libro ${accion === "deshabilitar" ? "deshabilitado" : "habilitado"} correctamente.` });
     } catch {
-      setMsg({ type: "error", text: `Error al ${accion} el libro.` });
+      setMsg({ type: "error", text: "Error al cambiar el estado del libro." });
     }
   };
 
@@ -148,30 +149,8 @@ function LibroDetalle() {
   return (
     <div className="home-container">
 
-      {/* ── SIDEBAR ── */}
-      <div className={`sidebar ${sidebarOpen ? "sidebar-open" : "sidebar-closed"}`}>
-        {sidebarOpen && (
-          <div className="sidebar-menu">
-            <div className={`sidebar-item ${location.pathname === "/home" ? "active" : ""}`} onClick={() => navigate("/home")}>Inicio</div>
-            {isAdmin && (
-              <div className={`sidebar-item ${location.pathname.includes("/usuarios") ? "active" : ""}`} onClick={() => navigate("/usuarios")}>Usuarios</div>
-            )}
-            <div className="sidebar-item active" onClick={() => navigate("/libros")}>Libros</div>
-            {hasManagementRole && (
-              <div className={`sidebar-item ${location.pathname === "/prestamos" ? "active" : ""}`} onClick={() => navigate("/prestamos")}>Prestamos</div>
-            )}
-            {!hasManagementRole && (
-              <>
-                <div className={`sidebar-item ${location.pathname === "/mis-prestamos" ? "active" : ""}`} onClick={() => navigate("/mis-prestamos")}>Mis Prestamos</div>
-                <div className={`sidebar-item ${location.pathname === "/devoluciones" ? "active" : ""}`} onClick={() => navigate("/devoluciones")}>Devoluciones</div>
-                <div className={`sidebar-item ${location.pathname === "/soporte" ? "active" : ""}`} onClick={() => navigate("/soporte")}>Soporte</div>
-              </>
-            )}
-          </div>
-        )}
-      </div>
+      <Sidebar isOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} />
 
-      {/* ── MAIN ── */}
       <div className="main-content">
 
         {/* Navbar */}
@@ -318,10 +297,7 @@ function LibroDetalle() {
                 )}
                 {hasManagementRole && (
                   <>
-                    <button
-                      className="libro-btn-editar"
-                      onClick={() => { setRecursoEditando({ ...libro }); setModalEditarAbierto(true); }}
-                    >
+                    <button className="libro-btn-editar" onClick={() => { setRecursoEditando({ ...libro }); setModalEditarAbierto(true); }}>
                       Editar Información
                     </button>
                     <button className="libro-btn-deshabilitar" onClick={handleToggleEstado}>
@@ -335,7 +311,7 @@ function LibroDetalle() {
           )}
         </div>
 
-        {/* ── MODAL EDITAR ── */}
+        {/* Modal Editar — dentro de main-content para que el z-index funcione */}
         {modalEditarAbierto && recursoEditando && (
           <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000 }} onClick={() => setModalEditarAbierto(false)}>
             <div className="modal-card" style={{ maxWidth: "860px", width: "90vw" }} onClick={e => e.stopPropagation()}>

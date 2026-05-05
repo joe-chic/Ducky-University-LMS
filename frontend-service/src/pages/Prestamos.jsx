@@ -2,15 +2,13 @@ import { useState, useEffect, useCallback } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import "./Prestamos.css";
 import duckIcon from "../assets/icons/duckIcon.svg";
+import Sidebar from "../components/Sidebar";
 import { bffGet, bffPost, bffPut, getToken } from "../api/bff";
 
 function Prestamos() {
   const navigate = useNavigate();
   const location = useLocation();
   const token = getToken();
-
-  const userRole = localStorage.getItem("ducky_role");
-  const isAdmin = userRole === "Administrador";
 
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [menuUsuarioAbierto, setMenuUsuarioAbierto] = useState(false);
@@ -197,25 +195,7 @@ function Prestamos() {
   return (
     <div className="home-container">
 
-      {/* Sidebar */}
-      <div className={`sidebar ${sidebarOpen ? "sidebar-open" : "sidebar-closed"}`}>
-        {sidebarOpen && (
-          <div className="sidebar-menu">
-            <div className={`sidebar-item ${location.pathname === '/home' ? 'active' : ''}`} onClick={() => navigate("/home")}>Inicio</div>
-            {isAdmin && (
-              <div className={`sidebar-item ${location.pathname.includes('/usuarios') ? 'active' : ''}`} onClick={() => navigate("/usuarios")}>Usuarios</div>
-            )}
-            <div className={`sidebar-item ${location.pathname.includes('/libros') ? 'active' : ''}`} onClick={() => navigate("/libros")}>Libros</div>
-            {!isAdmin && (
-              <>
-                <div className={`sidebar-item ${location.pathname === '/mis-prestamos' ? 'active' : ''}`} onClick={() => navigate("/mis-prestamos")}>Mis Prestamos</div>
-                <div className={`sidebar-item ${location.pathname === '/devoluciones' ? 'active' : ''}`} onClick={() => navigate("/devoluciones")}>Devoluciones</div>
-                <div className={`sidebar-item ${location.pathname === '/soporte' ? 'active' : ''}`} onClick={() => navigate("/soporte")}>Soporte</div>
-              </>
-            )}
-          </div>
-        )}
-      </div>
+      <Sidebar isOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} />
 
       <div className="main-content">
 
@@ -312,7 +292,6 @@ function Prestamos() {
           {tab === "devolver" && (
             <div className="loans-table-card">
               <h2>Registrar devolución</h2>
-
               {msgDevolver && (
                 <div className={`alert ${msgDevolver.type === "success" ? "alert-success" : "alert-error"}`}>
                   {msgDevolver.text}
@@ -324,7 +303,6 @@ function Prestamos() {
                   <button onClick={() => setMsgMulta(null)} style={{ float: "right", background: "none", border: "none", cursor: "pointer", fontWeight: "bold" }}>✕</button>
                 </div>
               )}
-
               <div style={{ display: "flex", gap: 12, marginBottom: 18, flexWrap: "wrap" }}>
                 <input className="search-bar" style={{ marginBottom: 0, flex: 1, minWidth: 200 }} placeholder="Buscar por título, ID o barcode..." value={search} onChange={e => setSearch(e.target.value)} />
                 <select value={filterState} onChange={e => setFilterState(e.target.value)} style={{ padding: "10px 14px", border: "1.5px solid #dde1e9", borderRadius: 8, fontSize: "0.95rem", background: "#fafafa" }}>
@@ -334,7 +312,6 @@ function Prestamos() {
                   <option value="completed">Completados</option>
                 </select>
               </div>
-
               {loadingLoans ? (
                 <div className="loading">Cargando...</div>
               ) : filtered.length === 0 ? (
@@ -359,10 +336,7 @@ function Prestamos() {
                               <button className="btn-return" onClick={() => handleDevolver(l.loan_id)}>Devolver</button>
                             )}
                             {l.loan_state !== "completed" && (
-                              <button
-                                onClick={() => abrirModalMulta(l)}
-                                style={{ padding: "6px 14px", background: "#c62828", color: "white", border: "none", borderRadius: "6px", fontSize: "0.82rem", fontWeight: "600", cursor: "pointer" }}
-                              >
+                              <button onClick={() => abrirModalMulta(l)} style={{ padding: "6px 14px", background: "#c62828", color: "white", border: "none", borderRadius: "6px", fontSize: "0.82rem", fontWeight: "600", cursor: "pointer" }}>
                                 Multar
                               </button>
                             )}
@@ -383,18 +357,15 @@ function Prestamos() {
           {tab === "multas" && (
             <div className="loans-table-card">
               <h2>Multas registradas</h2>
-
               {msgMulta && (
                 <div className={`alert ${msgMulta.type === "success" ? "alert-success" : "alert-error"}`}>
                   {msgMulta.text}
                   <button onClick={() => setMsgMulta(null)} style={{ float: "right", background: "none", border: "none", cursor: "pointer", fontWeight: "bold" }}>✕</button>
                 </div>
               )}
-
               <p style={{ marginBottom: 16, color: "#666", fontSize: "0.9rem" }}>
                 Monto base por día de retraso: <strong>${dailyFine} MXN</strong>
               </p>
-
               {loadingFines ? (
                 <div className="loading">Cargando multas...</div>
               ) : fines.length === 0 ? (
@@ -420,10 +391,7 @@ function Prestamos() {
                         <td>{formatDate(f.created_at)}</td>
                         <td>
                           {f.fine_status === "unpaid" ? (
-                            <button
-                              onClick={() => handlePagarMulta(f.find_id)}
-                              style={{ padding: "5px 12px", background: "#FFD400", color: "#1a1a1a", border: "1px solid #e0c000", borderRadius: "6px", fontWeight: "600", cursor: "pointer", fontSize: "0.82rem" }}
-                            >
+                            <button onClick={() => handlePagarMulta(f.find_id)} style={{ padding: "5px 12px", background: "#FFD400", color: "#1a1a1a", border: "1px solid #e0c000", borderRadius: "6px", fontWeight: "600", cursor: "pointer", fontSize: "0.82rem" }}>
                               Marcar pagada
                             </button>
                           ) : (
@@ -438,44 +406,33 @@ function Prestamos() {
             </div>
           )}
         </div>
-      </div>
 
-      {/* Modal Multa */}
-      {modalMulta && (
-        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000 }}>
-          <div style={{ background: "white", borderRadius: "12px", padding: "32px", width: "100%", maxWidth: "420px", boxShadow: "0 8px 32px rgba(0,0,0,0.2)" }}>
-            <h2 style={{ marginBottom: "8px", fontSize: "1.2rem", fontWeight: "bold" }}>Aplicar Multa</h2>
-            <p style={{ color: "#666", fontSize: "0.9rem", marginBottom: "20px" }}>
-              Préstamo #{modalMulta.loan_id} — {modalMulta.days} día(s) activo.<br />
-              Monto calculado: <strong>${modalMulta.days * dailyFine} MXN</strong>
-            </p>
-            <div className="form-group">
-              <label>Monto final (MXN)</label>
-              <input
-                type="number"
-                value={multaMonto}
-                onChange={e => setMultaMonto(e.target.value)}
-                style={{ width: "100%", padding: "10px 14px", border: "1.5px solid #dde1e9", borderRadius: "8px", fontSize: "1rem", boxSizing: "border-box" }}
-              />
-            </div>
-            <div style={{ display: "flex", gap: 12, marginTop: 20 }}>
-              <button
-                onClick={() => setModalMulta(null)}
-                style={{ flex: 1, padding: "11px", background: "#f5f5f5", color: "#333", border: "1px solid #ddd", borderRadius: "8px", fontWeight: "600", cursor: "pointer" }}
-              >
-                Cancelar
-              </button>
-              <button
-                onClick={handleConfirmarMulta}
-                style={{ flex: 1, padding: "11px", background: "#c62828", color: "white", border: "none", borderRadius: "8px", fontWeight: "700", cursor: "pointer" }}
-              >
-                Confirmar Multa
-              </button>
+        {/* Modal Multa */}
+        {modalMulta && (
+          <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000 }}>
+            <div style={{ background: "white", borderRadius: "12px", padding: "32px", width: "100%", maxWidth: "420px", boxShadow: "0 8px 32px rgba(0,0,0,0.2)" }}>
+              <h2 style={{ marginBottom: "8px", fontSize: "1.2rem", fontWeight: "bold" }}>Aplicar Multa</h2>
+              <p style={{ color: "#666", fontSize: "0.9rem", marginBottom: "20px" }}>
+                Préstamo #{modalMulta.loan_id} — {modalMulta.days} día(s) activo.<br />
+                Monto calculado: <strong>${modalMulta.days * dailyFine} MXN</strong>
+              </p>
+              <div className="form-group">
+                <label>Monto final (MXN)</label>
+                <input type="number" value={multaMonto} onChange={e => setMultaMonto(e.target.value)} style={{ width: "100%", padding: "10px 14px", border: "1.5px solid #dde1e9", borderRadius: "8px", fontSize: "1rem", boxSizing: "border-box" }} />
+              </div>
+              <div style={{ display: "flex", gap: 12, marginTop: 20 }}>
+                <button onClick={() => setModalMulta(null)} style={{ flex: 1, padding: "11px", background: "#f5f5f5", color: "#333", border: "1px solid #ddd", borderRadius: "8px", fontWeight: "600", cursor: "pointer" }}>
+                  Cancelar
+                </button>
+                <button onClick={handleConfirmarMulta} style={{ flex: 1, padding: "11px", background: "#c62828", color: "white", border: "none", borderRadius: "8px", fontWeight: "700", cursor: "pointer" }}>
+                  Confirmar Multa
+                </button>
+              </div>
             </div>
           </div>
-        </div>
-      )}
+        )}
 
+      </div>
     </div>
   );
 }
