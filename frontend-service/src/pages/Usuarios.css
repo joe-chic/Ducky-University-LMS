@@ -298,6 +298,14 @@
   font-size: 12px;
 }
 
+.badge-inactivo {
+  background: #FF8C00;
+  color: #F8F9FA;
+  padding: 2px 12px;
+  border-radius: 20px;
+  font-size: 12px;
+}
+
 .btn-action {
   background: #F8F9FA;
   border: 2px solid #FFD400;
@@ -320,7 +328,10 @@
   width: 16px;
   height: 16px;
   vertical-align: middle;
+  object-fit: contain;
+  flex-shrink: 0;
 }
+
 
 /* Panel de permisos */
 .permisos-panel {

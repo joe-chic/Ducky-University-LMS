@@ -1,11 +1,15 @@
 import { useEffect, useState, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import "./Usuarios.css";
-import duckIcon from "../assets/icons/duckIcon.svg";
 import searchIcon from "../assets/icons/searchIcon.svg";
 import updateIcon from "../assets/icons/updateIcon.svg";
 import buttonCirculo from "../assets/icons/Button-circulo.svg";
+import noIcon from "../assets/icons/icon-no.png";
+import checkIcon from "../assets/icons/icon-check.png";
+import ejemplaresIcon from "../assets/icons/icon-ejemplares.png";
+import searchPngIcon from "../assets/icons/icon-search.png";
 import Sidebar from "../components/Sidebar";
+import TopBar from "../components/TopBar";
 import { bffGet, bffPost, bffPut, getToken } from "../api/bff";
 
 function Libros() {
@@ -19,7 +23,6 @@ function Libros() {
   const isAlumno = !hasManagementRole;
 
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const [menuUsuarioAbierto, setMenuUsuarioAbierto] = useState(false);
   const [recursos, setRecursos] = useState([]);
   const [loading, setLoading] = useState(false);
   const [busqueda, setBusqueda] = useState("");
@@ -79,14 +82,6 @@ function Libros() {
     const t = setTimeout(fetchRecursos, 300);
     return () => clearTimeout(t);
   }, [fetchRecursos]);
-
-  const handleLogout = () => {
-    localStorage.removeItem("ducky_token");
-    localStorage.removeItem("ducky_role");
-    localStorage.removeItem("ducky_campus_id");
-    localStorage.removeItem("ducky_nombre");
-    navigate("/");
-  };
 
   const handleSolicitarPrestamo = async (recurso, e) => {
     e.stopPropagation();
@@ -200,46 +195,22 @@ function Libros() {
 
       <div className="main-content">
 
-        {/* Navbar */}
-        <nav className="navbar">
-          <div className="navbar-left">
-            <button className="hamburger" onClick={() => setSidebarOpen(!sidebarOpen)}>☰</button>
-            <div className="navbar-logo">
-              <img src={duckIcon} alt="Ducky" className="navbar-duck-icon" />
-              <div className="navbar-logo-text">
-                <span className="navbar-ducky">Ducky</span>
-                <span className="navbar-university">University</span>
-              </div>
-            </div>
-          </div>
-          <div className="navbar-right">
-            <span style={{ cursor: "pointer" }} onClick={() => alert("Próximamente")}>Soporte</span>
-            <span style={{ cursor: "pointer" }} onClick={() => alert("Próximamente")}>Notificaciones</span>
-            <div style={{ position: "relative", cursor: "pointer" }} onClick={() => setMenuUsuarioAbierto(!menuUsuarioAbierto)}>
-              <span>Usuario</span>
-              {menuUsuarioAbierto && (
-                <div style={{ position: "absolute", top: "100%", right: 0, backgroundColor: "#fff", color: "#333", padding: "10px", borderRadius: "4px", boxShadow: "0 2px 5px rgba(0,0,0,0.2)", zIndex: 10, minWidth: "120px" }}>
-                  <button onClick={handleLogout} style={{ border: "none", background: "none", cursor: "pointer", color: "red", padding: "5px", width: "100%", textAlign: "left" }}>Cerrar sesión</button>
-                </div>
-              )}
-            </div>
-          </div>
-        </nav>
+        <TopBar onMenuClick={() => setSidebarOpen(!sidebarOpen)} />
 
         {/* Contenido — mismo layout que Usuarios */}
         <div className="usuarios-content">
 
           <div className="usuarios-main">
 
-            {/* Barra de búsqueda — igual que Usuarios */}
-            <div className="search-bar">
-              <img src={searchIcon} alt="buscar" className="search-icon-img" />
+            {/* Barra de búsqueda */}
+            <div style={{ display: "flex", alignItems: "center", background: "white", border: "1px solid #e0e0e0", borderRadius: "8px", padding: "0 16px", marginBottom: "20px" }}>
+              <img src={searchIcon} alt="buscar" style={{ width: "18px", height: "18px", marginRight: "10px", opacity: 0.5 }} />
               <input
                 type="text"
                 placeholder="Buscar libros, géneros, autores..."
                 value={busqueda}
                 onChange={e => { setBusqueda(e.target.value); setPage(1); }}
-                className="search-input"
+                style={{ flex: 1, padding: "12px 0", border: "none", outline: "none", fontSize: "0.95rem", background: "transparent" }}
               />
             </div>
 
@@ -265,8 +236,12 @@ function Libros() {
                     onClick={() => navigate(`/libros/${recurso.id}`)}
                     style={{ cursor: "pointer" }}
                   >
-                    {/* Portada — mismo tamaño que avatar */}
-                    <div className="usuario-avatar" style={{ width: "56px", height: "72px", background: "linear-gradient(135deg, #1a1a2e, #2d2d5e)", borderRadius: "6px", border: "1px solid #212529", flexShrink: 0 }} />
+                    {/* Portada */}
+                    {recurso.portada ? (
+                      <img src={recurso.portada} alt="portada" style={{ width: "56px", height: "72px", objectFit: "cover", borderRadius: "6px", border: "1px solid #212529", flexShrink: 0 }} />
+                    ) : (
+                      <div className="usuario-avatar" style={{ width: "56px", height: "72px", background: "linear-gradient(135deg, #1a1a2e, #2d2d5e)", borderRadius: "6px", border: "1px solid #212529", flexShrink: 0 }} />
+                    )}
 
                     {/* Info — mismo estilo que usuario-info */}
                     <div className="usuario-info">
@@ -294,19 +269,19 @@ function Libros() {
                             <img src={updateIcon} alt="editar" className="btn-icon" /> Editar
                           </button>
                           <button className="btn-action" onClick={e => handleToggleEstado(recurso, e)}>
-                            <span style={{ marginRight: "4px", fontSize: "14px" }}>{recurso.disponible ? "🚫" : "✅"}</span>
+                            <img src={recurso.disponible ? noIcon : checkIcon} alt={recurso.disponible ? "deshabilitar" : "habilitar"} className="btn-icon btn-icon--toggle" />
                             {recurso.disponible ? "Deshabilitar" : "Habilitar"}
                           </button>
                           {recurso.tipo === "book" && (
                             <button className="btn-action" onClick={e => abrirEjemplares(recurso, e)}>
-                              Ejemplares
+                              <img src={ejemplaresIcon} alt="ejemplares" className="btn-icon" /> Ejemplares
                             </button>
                           )}
                         </>
                       )}
 
                       <button className="btn-action" onClick={e => { e.stopPropagation(); navigate(`/libros/${recurso.id}`); }}>
-                        Busqueda
+                        <img src={searchPngIcon} alt="buscar" className="btn-icon" /> Busqueda
                       </button>
                     </div>
                   </div>
@@ -384,7 +359,7 @@ function Libros() {
         {hasManagementRole && (
           <button
             className="btn-flotante"
-            onClick={() => { setRecursoEditando({ titulo: "", tipo: "book", disponible: true, autor_id: "", editorial_id: "", generos_ids: [], lenguajes_ids: [], isbn: "", edicion: "", sinopsis: "", costo: 0, ano_publicacion: "" }); setModalRecursoAbierto(true); }}
+            onClick={() => { setRecursoEditando({ titulo: "", tipo: "book", disponible: true, autor_id: "", editorial_id: "", generos_ids: [], lenguajes_ids: [], isbn: "", edicion: "", sinopsis: "", costo: 0, ano_publicacion: "", portada: null }); setModalRecursoAbierto(true); }}
           >
             <img src={buttonCirculo} alt="agregar" className="btn-flotante-icon" />
           </button>
@@ -399,6 +374,35 @@ function Libros() {
                 <h2 className="modal-titulo">{recursoEditando?.id ? "Editar Recurso" : "Registrar Nuevo Recurso"}</h2>
               </div>
               <div className="modal-form" style={{ maxHeight: "72vh", overflowY: "auto", paddingRight: "10px" }}>
+
+                {/* Portada */}
+                <div className="modal-foto-upload">
+                  <input
+                    type="file"
+                    accept="image/*"
+                    id="portada-upload"
+                    style={{ display: "none" }}
+                    onChange={e => {
+                      const file = e.target.files[0];
+                      if (file) setRecursoEditando({ ...recursoEditando, portada: URL.createObjectURL(file), portadaFile: file });
+                    }}
+                  />
+                  <label htmlFor="portada-upload" className="modal-foto-label">
+                    {recursoEditando?.portada ? (
+                      <img
+                        src={recursoEditando.portada}
+                        alt="portada"
+                        style={{ width: "90px", height: "120px", objectFit: "cover", borderRadius: "6px", border: "3px solid #FFD400" }}
+                      />
+                    ) : (
+                      <div style={{ width: "90px", height: "120px", background: "linear-gradient(135deg, #1a1a2e, #2d2d5e)", borderRadius: "6px", border: "3px solid #FFD400", display: "flex", alignItems: "center", justifyContent: "center", color: "#aaa", fontSize: "11px", textAlign: "center", padding: "8px" }}>
+                        Sin portada
+                      </div>
+                    )}
+                    <span className="modal-foto-texto">📷 Subir portada</span>
+                  </label>
+                </div>
+
                 <label className="detail-label">Título *</label>
                 <input type="text" value={recursoEditando?.titulo || ""} onChange={e => setRecursoEditando({ ...recursoEditando, titulo: e.target.value })} className="modal-input" />
                 <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "15px" }}>

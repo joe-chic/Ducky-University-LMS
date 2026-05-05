@@ -1,14 +1,14 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import "./Usuarios.css";
-import duckIcon from "../assets/icons/duckIcon.svg";
 import userIcon from "../assets/icons/userIcon.svg";
-import userIconNav from "../assets/icons/userIconNav.svg";
-import notificationIcon from "../assets/icons/notificationIcon.svg";
 import searchIcon from "../assets/icons/searchIcon.svg";
 import buttonCirculo from "../assets/icons/Button-circulo.svg";
 import updateIcon from "../assets/icons/updateIcon.svg";
+import noIcon from "../assets/icons/icon-no.png";
+import checkIcon from "../assets/icons/icon-check.png";
 import Sidebar from "../components/Sidebar";
+import TopBar from "../components/TopBar";
 import { permisosIniciales } from "../data/Permisos";
 import { bffDelete, bffGet, bffPost, bffPut, getToken } from "../api/bff";
 
@@ -35,11 +35,9 @@ function Usuarios() {
   const [permisosModificados, setPermisosModificados] = useState({});
   const [seccionesAbiertas, setSeccionesAbiertas] = useState({});
   const [modalAbierto, setModalAbierto] = useState(false);
-  const [menuUsuarioAbierto, setMenuUsuarioAbierto] = useState(false);
   const [usuarioEditando, setUsuarioEditando] = useState(null);
-  const [nuevoUsuario, setNuevoUsuario] = useState({ nombre: "", rol: "", correo: "", contrasena: "", foto: null });
+  const [nuevoUsuario, setNuevoUsuario] = useState({ nombre: "", rol: "", correo: "", contrasena: "", matricula: "", foto: null });
 
-  const usuarioSesion = { nombre: "Admin", foto: null };
   const totalPaginas = Math.ceil(totalUsuarios / registrosPorPagina);
 
   useEffect(() => {
@@ -97,11 +95,6 @@ function Usuarios() {
     setSeccionesAbiertas(prev => ({ ...prev, [key]: !prev[key] }));
   }
 
-  const handleLogout = () => {
-    localStorage.removeItem("ducky_token");
-    navigate("/");
-  };
-
   return (
     <div className="usuarios-container">
 
@@ -109,35 +102,7 @@ function Usuarios() {
 
       <div className="main-content">
 
-        {/* Navbar */}
-        <nav className="navbar">
-          <div className="navbar-left">
-            <button className="hamburger" onClick={() => setSidebarOpen(!sidebarOpen)}>☰</button>
-            <div className="navbar-logo">
-              <img src={duckIcon} alt="Ducky" className="navbar-duck-icon" />
-              <div className="navbar-logo-text">
-                <span className="navbar-ducky">Ducky</span>
-                <span className="navbar-university">University</span>
-              </div>
-            </div>
-          </div>
-          <div className="navbar-right">
-            <span style={{ cursor: "pointer" }} onClick={() => alert("Próximamente")}>Soporte</span>
-            <div className="navbar-icon-group" style={{ cursor: "pointer" }} onClick={() => alert("Próximamente")}>
-              <span>Notificaciones</span>
-              <img src={notificationIcon} alt="notificaciones" className="nav-icon" />
-            </div>
-            <div className="navbar-icon-group" style={{ cursor: "pointer", position: "relative" }} onClick={() => setMenuUsuarioAbierto(!menuUsuarioAbierto)}>
-              <span>{usuarioSesion.nombre}</span>
-              <img src={usuarioSesion.foto || userIconNav} alt="usuario" className="nav-icon" />
-              {menuUsuarioAbierto && (
-                <div style={{ position: "absolute", top: "100%", right: 0, backgroundColor: "#fff", color: "#333", padding: "10px", borderRadius: "4px", boxShadow: "0 2px 5px rgba(0,0,0,0.2)", zIndex: 10, minWidth: "120px" }}>
-                  <button onClick={handleLogout} style={{ border: "none", background: "none", cursor: "pointer", color: "red", padding: "5px", width: "100%", textAlign: "left" }}>Cerrar sesión</button>
-                </div>
-              )}
-            </div>
-          </div>
-        </nav>
+        <TopBar onMenuClick={() => setSidebarOpen(!sidebarOpen)} />
 
         {/* Contenido */}
         <div className="usuarios-content">
@@ -168,12 +133,12 @@ function Usuarios() {
                     <p className="usuario-telefono">{usuario.telefono}</p>
                   </div>
                   <div className="usuario-actions">
-                    <span className="badge-activo">{usuario.activo ? "Activo" : "Inactivo"}</span>
+                    <span className={usuario.activo ? "badge-activo" : "badge-inactivo"}>{usuario.activo ? "Activo" : "Inactivo"}</span>
                     <button
                       className="btn-action"
                       onClick={() => {
                         setUsuarioEditando(usuario);
-                        setNuevoUsuario({ nombre: usuario.nombre, rol: usuario.rol, correo: usuario.correo, contrasena: "", foto: null });
+                        setNuevoUsuario({ nombre: usuario.nombre, rol: usuario.rol, correo: usuario.correo, contrasena: "", matricula: usuario.matricula || "", foto: null });
                         setModalAbierto(true);
                       }}
                     >
@@ -198,7 +163,7 @@ function Usuarios() {
                         }
                       }}
                     >
-                      <span style={{ marginRight: "6px", fontSize: "16px" }}>{usuario.activo ? "🚫" : "✅"}</span>
+                      <img src={usuario.activo ? noIcon : checkIcon} alt={usuario.activo ? "deshabilitar" : "habilitar"} className="btn-icon" />
                       {usuario.activo ? "Deshabilitar" : "Habilitar"}
                     </button>
                   </div>
@@ -271,7 +236,7 @@ function Usuarios() {
         </div>
 
         {/* Botón + flotante */}
-        <button className="btn-flotante" onClick={() => { setUsuarioEditando(null); setModalAbierto(true); }}>
+        <button className="btn-flotante" onClick={() => { setUsuarioEditando(null); setNuevoUsuario({ nombre: "", rol: "", correo: "", contrasena: "", matricula: "", foto: null }); setModalAbierto(true); }}>
           <img src={buttonCirculo} alt="agregar" className="btn-flotante-icon" />
         </button>
 
@@ -279,7 +244,7 @@ function Usuarios() {
         {modalAbierto && (
           <div className="modal-overlay" onClick={() => setModalAbierto(false)}>
             <div className="modal-card" onClick={(e) => e.stopPropagation()}>
-              <button className="modal-cerrar" onClick={() => { setModalAbierto(false); setNuevoUsuario({ nombre: "", rol: "", correo: "", contrasena: "", foto: null }); }}>✕</button>
+              <button className="modal-cerrar" onClick={() => { setModalAbierto(false); setNuevoUsuario({ nombre: "", rol: "", correo: "", contrasena: "", matricula: "", foto: null }); }}>✕</button>
               <div className="modal-header">
                 <h2 className="modal-titulo">{usuarioEditando ? "Edición de Usuario" : "Creación de Usuario"}</h2>
               </div>
@@ -305,22 +270,63 @@ function Usuarios() {
                 </select>
                 <input type="email" placeholder="Correo" value={nuevoUsuario.correo} onChange={(e) => setNuevoUsuario({ ...nuevoUsuario, correo: e.target.value })} className="modal-input" />
                 <input type="password" placeholder="Contraseña" value={nuevoUsuario.contrasena} onChange={(e) => setNuevoUsuario({ ...nuevoUsuario, contrasena: e.target.value })} className="modal-input" />
+                {nuevoUsuario.rol === "Alumno" && (
+                  <input type="text" placeholder="Matrícula" value={nuevoUsuario.matricula} onChange={(e) => setNuevoUsuario({ ...nuevoUsuario, matricula: e.target.value })} className="modal-input" />
+                )}
+                {(nuevoUsuario.rol === "Profesor" || nuevoUsuario.rol === "Bibliotecario") && (
+                  <input type="text" placeholder="Número de identificación" value={nuevoUsuario.matricula} onChange={(e) => setNuevoUsuario({ ...nuevoUsuario, matricula: e.target.value })} className="modal-input" />
+                )}
               </div>
               <div className="modal-botones">
-                <button className="modal-cancelar" onClick={() => { setModalAbierto(false); setUsuarioEditando(null); setNuevoUsuario({ nombre: "", rol: "", correo: "", contrasena: "", foto: null }); }}>Cancelar</button>
+                <button className="modal-cancelar" onClick={() => { setModalAbierto(false); setUsuarioEditando(null); setNuevoUsuario({ nombre: "", rol: "", correo: "", contrasena: "", matricula: "", foto: null }); }}>Cancelar</button>
                 <button className="modal-confirmar" onClick={async () => {
                   if (!nuevoUsuario.nombre || !nuevoUsuario.rol || !nuevoUsuario.correo) { alert("Por favor, llena los campos: Nombre, Rol y Correo."); return; }
                   if (!usuarioEditando && !nuevoUsuario.contrasena) { alert("Por favor, ingresa una contraseña para el nuevo usuario."); return; }
                   try {
                     const token = getToken();
+
+                    // -------------------------------------------------------------------------
+                    // TODO: INTEGRACIÓN PENDIENTE — Verificación de credenciales institucionales
+                    //
+                    // Antes de crear el usuario, validar que la matrícula o número de
+                    // identificación exista en el microservicio correspondiente:
+                    //
+                    //   Alumno      → ducky-scholar-service   (base: ducky_scholar_db)
+                    //   Profesor    → ducky-human-capital-service (base: ducky_human_capital_db)
+                    //   Bibliotecario → ducky-human-capital-service
+                    //
+                    // El BFF debe exponer un endpoint proxy, por ejemplo:
+                    //   POST /api/validate/credenciales
+                    //   Headers: { Authorization: "Bearer <token>" }
+                    //   Body:    { rol: string, matricula: string, correo: string }
+                    //   Response:{ valido: boolean, mensaje?: string }
+                    //
+                    // Flujo esperado:
+                    //   1. Llamar al endpoint de validación
+                    //   2. Si valido === false → mostrar error y NO crear usuario
+                    //   3. Si valido === true  → continuar con bffPost
+                    //
+                    // if (!usuarioEditando && nuevoUsuario.matricula) {
+                    //   const validacion = await bffPost("/api/validate/credenciales", {
+                    //     rol: nuevoUsuario.rol,
+                    //     matricula: nuevoUsuario.matricula,
+                    //     correo: nuevoUsuario.correo,
+                    //   }, { token });
+                    //   if (!validacion.valido) {
+                    //     alert(validacion.mensaje || "Las credenciales no fueron encontradas en el sistema institucional.");
+                    //     return;
+                    //   }
+                    // }
+                    // -------------------------------------------------------------------------
+
                     if (usuarioEditando) {
-                      await bffPut(`/api/users/${usuarioEditando.id}`, { nombre: nuevoUsuario.nombre, rol: nuevoUsuario.rol, correo: nuevoUsuario.correo, telefono: null, contrasena: nuevoUsuario.contrasena, activo: usuarioEditando.activo, foto: null }, { token });
+                      await bffPut(`/api/users/${usuarioEditando.id}`, { nombre: nuevoUsuario.nombre, rol: nuevoUsuario.rol, correo: nuevoUsuario.correo, telefono: null, contrasena: nuevoUsuario.contrasena, matricula: nuevoUsuario.matricula, activo: usuarioEditando.activo, foto: null }, { token });
                     } else {
-                      await bffPost("/api/users", { nombre: nuevoUsuario.nombre, rol: nuevoUsuario.rol, correo: nuevoUsuario.correo, telefono: null, contrasena: nuevoUsuario.contrasena, activo: true, foto: null }, { token });
+                      await bffPost("/api/users", { nombre: nuevoUsuario.nombre, rol: nuevoUsuario.rol, correo: nuevoUsuario.correo, telefono: null, contrasena: nuevoUsuario.contrasena, matricula: nuevoUsuario.matricula, activo: true, foto: null }, { token });
                     }
                     setModalAbierto(false);
                     setUsuarioEditando(null);
-                    setNuevoUsuario({ nombre: "", rol: "", correo: "", contrasena: "", foto: null });
+                    setNuevoUsuario({ nombre: "", rol: "", correo: "", contrasena: "", matricula: "", foto: null });
                     setRefreshKey(k => k + 1);
                   } catch (err) {
                     alert(err.message || "No se pudo guardar el usuario");

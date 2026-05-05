@@ -1,8 +1,8 @@
 import { useState, useEffect, useCallback } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import "./Prestamos.css";
-import duckIcon from "../assets/icons/duckIcon.svg";
 import Sidebar from "../components/Sidebar";
+import TopBar from "../components/TopBar";
 import { bffGet, bffPost, bffPut, getToken } from "../api/bff";
 
 function Prestamos() {
@@ -11,7 +11,6 @@ function Prestamos() {
   const token = getToken();
 
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const [menuUsuarioAbierto, setMenuUsuarioAbierto] = useState(false);
 
   const [tab, setTab] = useState("prestar");
 
@@ -75,14 +74,6 @@ function Prestamos() {
   useEffect(() => {
     if (tab === "multas") fetchFines();
   }, [tab, fetchFines]);
-
-  const handleLogout = () => {
-    localStorage.removeItem("ducky_token");
-    localStorage.removeItem("ducky_role");
-    localStorage.removeItem("ducky_campus_id");
-    localStorage.removeItem("ducky_nombre");
-    navigate("/");
-  };
 
   async function handlePrestar() {
     if (!barcode.trim() || !campusIdInput) {
@@ -199,31 +190,7 @@ function Prestamos() {
 
       <div className="main-content">
 
-        {/* Navbar */}
-        <nav className="navbar">
-          <div className="navbar-left">
-            <button className="hamburger" onClick={() => setSidebarOpen(!sidebarOpen)}>☰</button>
-            <div className="navbar-logo">
-              <img src={duckIcon} alt="Ducky" className="navbar-duck-icon" />
-              <div className="navbar-logo-text">
-                <span className="navbar-ducky">Ducky</span>
-                <span className="navbar-university">University</span>
-              </div>
-            </div>
-          </div>
-          <div className="navbar-right">
-            <span style={{ cursor: "pointer" }} onClick={() => alert("Próximamente")}>Soporte</span>
-            <span style={{ cursor: "pointer" }} onClick={() => alert("Próximamente")}>Notificaciones</span>
-            <div style={{ position: "relative", cursor: "pointer", display: "inline-block" }} onClick={() => setMenuUsuarioAbierto(!menuUsuarioAbierto)}>
-              <span>Usuario</span>
-              {menuUsuarioAbierto && (
-                <div style={{ position: "absolute", top: "100%", right: 0, backgroundColor: "#fff", color: "#333", padding: "10px", borderRadius: "4px", boxShadow: "0 2px 5px rgba(0,0,0,0.2)", zIndex: 10, minWidth: "120px" }}>
-                  <button onClick={handleLogout} style={{ border: "none", background: "none", cursor: "pointer", color: "red", padding: "5px", width: "100%", textAlign: "left" }}>Cerrar sesión</button>
-                </div>
-              )}
-            </div>
-          </div>
-        </nav>
+        <TopBar onMenuClick={() => setSidebarOpen(!sidebarOpen)} />
 
         {/* Contenido */}
         <div className="prestamos-container">

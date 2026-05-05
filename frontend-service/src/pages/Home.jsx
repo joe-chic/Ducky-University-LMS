@@ -1,8 +1,8 @@
 import { useEffect, useState } from "react";
 import "./Home.css";
 import landingImage from "../assets/images/landingImage.png";
-import duckIcon from "../assets/icons/duckIcon.svg";
 import Sidebar from "../components/Sidebar";
+import TopBar from "../components/TopBar";
 import { useNavigate, useLocation } from "react-router-dom";
 import { bffGet, bffPut, bffDelete, bffPost, getToken } from "../api/bff";
 
@@ -13,8 +13,6 @@ function Home() {
   const [recursos, setRecursos] = useState([]);
   const [busqueda, setBusqueda] = useState("");
   const [loading, setLoading] = useState(false);
-  const [menuUsuarioAbierto, setMenuUsuarioAbierto] = useState(false);
-
   const [recursoEditando, setRecursoEditando] = useState(null);
   const [modalRecursoAbierto, setModalRecursoAbierto] = useState(false);
 
@@ -72,12 +70,6 @@ function Home() {
       clearTimeout(t);
     };
   }, [busqueda, page]);
-
-  const handleLogout = () => {
-    localStorage.removeItem("ducky_token");
-    localStorage.removeItem("ducky_role");
-    navigate("/");
-  };
 
   const handleGuardarRecurso = async () => {
     if (!recursoEditando || !recursoEditando.titulo || !recursoEditando.tipo) {
@@ -170,31 +162,7 @@ function Home() {
 
       <div className="main-content">
 
-        {/* Navbar */}
-        <nav className="navbar">
-          <div className="navbar-left">
-            <button className="hamburger" onClick={() => setSidebarOpen(!sidebarOpen)}>☰</button>
-            <div className="navbar-logo">
-              <img src={duckIcon} alt="Ducky" className="navbar-duck-icon" />
-              <div className="navbar-logo-text">
-                <span className="navbar-ducky">Ducky</span>
-                <span className="navbar-university">University</span>
-              </div>
-            </div>
-          </div>
-          <div className="navbar-right">
-            <span style={{ cursor: "pointer" }} onClick={() => alert("Próximamente")}>Soporte</span>
-            <span style={{ cursor: "pointer" }} onClick={() => alert("Próximamente")}>Notificaciones</span>
-            <div style={{ position: "relative", cursor: "pointer", display: "inline-block" }} onClick={() => setMenuUsuarioAbierto(!menuUsuarioAbierto)}>
-              <span>Usuario</span>
-              {menuUsuarioAbierto && (
-                <div style={{ position: "absolute", top: "100%", right: 0, backgroundColor: "#fff", color: "#333", padding: "10px", borderRadius: "4px", boxShadow: "0 2px 5px rgba(0,0,0,0.2)", zIndex: 10, minWidth: "120px" }}>
-                  <button onClick={handleLogout} style={{ border: "none", background: "none", cursor: "pointer", color: "red", padding: "5px", width: "100%", textAlign: "left" }}>Cerrar sesión</button>
-                </div>
-              )}
-            </div>
-          </div>
-        </nav>
+        <TopBar onMenuClick={() => setSidebarOpen(!sidebarOpen)} />
 
         {/* Hero */}
         <div className="hero" style={{ backgroundImage: `linear-gradient(rgba(0,0,0,0.4), rgba(0,0,0,0.4)), url(${landingImage})` }}>

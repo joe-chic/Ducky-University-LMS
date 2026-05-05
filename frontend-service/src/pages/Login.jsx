@@ -22,6 +22,8 @@ function Login() {
       });
       localStorage.setItem("ducky_token", data.token);
       localStorage.setItem("ducky_role", data.user.rol);
+      localStorage.setItem("ducky_nombre", data.user.nombre || "");
+      localStorage.setItem("ducky_correo", data.user.correo || usuario);
       navigate("/home");
     } catch (err) {
       alert(err.message || "No se pudo iniciar sesión");
@@ -29,7 +31,7 @@ function Login() {
   }
 
   function handleCrearCuenta() {
-    navigate("/usuarios");
+    navigate("/registro");
   }
 
   return (

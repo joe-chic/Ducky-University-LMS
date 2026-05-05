@@ -1,0 +1,170 @@
+.topbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background: #F8F9FA;
+  padding: 16px 40px;
+  color: #525B65;
+  font-size: 18px;
+  flex-shrink: 0;
+}
+
+.topbar-left {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.topbar-menu-btn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 4px;
+  display: flex;
+  align-items: center;
+}
+
+.topbar-logo {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.topbar-duck-icon {
+  width: 35px;
+  height: 35px;
+  object-fit: contain;
+}
+
+.topbar-logo-text {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.2;
+}
+
+.topbar-ducky {
+  color: #FFD400;
+  font-size: 18px;
+  font-weight: bold;
+}
+
+.topbar-university {
+  color: #525B65;
+  font-size: 12px;
+}
+
+.topbar-right {
+  display: flex;
+  align-items: center;
+  gap: 24px;
+}
+
+.topbar-icon {
+  width: 22px;
+  height: 22px;
+  object-fit: contain;
+}
+
+.topbar-action-btn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: #525B65;
+  font-size: 15px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.topbar-action-btn:hover {
+  color: #FFD400;
+}
+
+.topbar-user-wrapper {
+  position: relative;
+}
+
+.topbar-user-dropdown {
+  position: absolute;
+  top: calc(100% + 10px);
+  right: 0;
+  background: #fff;
+  border-radius: 12px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
+  min-width: 220px;
+  z-index: 100;
+  overflow: hidden;
+  border: 1px solid #e9ecef;
+}
+
+.topbar-profile-avatar {
+  display: flex;
+  justify-content: center;
+  padding: 20px 20px 12px;
+}
+
+.topbar-profile-avatar-img {
+  width: 52px;
+  height: 52px;
+  border-radius: 50%;
+  object-fit: contain;
+  background: #f0f0f0;
+  padding: 8px;
+  border: 2px solid #FFD400;
+}
+
+.topbar-profile-info {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  padding: 0 20px 16px;
+  text-align: center;
+}
+
+.topbar-profile-nombre {
+  font-size: 15px;
+  font-weight: 700;
+  color: #212529;
+}
+
+.topbar-profile-correo {
+  font-size: 12px;
+  color: #6c757d;
+  word-break: break-all;
+}
+
+.topbar-profile-rol {
+  display: inline-block;
+  margin-top: 4px;
+  padding: 2px 10px;
+  background: #fffde7;
+  border: 1px solid #FFD400;
+  border-radius: 20px;
+  font-size: 11px;
+  font-weight: 700;
+  color: #856404;
+}
+
+.topbar-profile-divider {
+  height: 1px;
+  background: #e9ecef;
+  margin: 0;
+}
+
+.topbar-logout-btn {
+  width: 100%;
+  padding: 12px 20px;
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: #dc3545;
+  font-size: 14px;
+  font-weight: 600;
+  text-align: center;
+  transition: background 0.15s ease;
+}
+
+.topbar-logout-btn:hover {
+  background: #fff5f5;
+}

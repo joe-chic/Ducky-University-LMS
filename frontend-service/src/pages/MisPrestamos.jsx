@@ -1,8 +1,8 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import "./Home.css";
-import duckIcon from "../assets/icons/duckIcon.svg";
 import Sidebar from "../components/Sidebar";
+import TopBar from "../components/TopBar";
 import { bffGet, getToken } from "../api/bff";
 
 function MisPrestamos() {
@@ -10,7 +10,6 @@ function MisPrestamos() {
   const campusId = Number(localStorage.getItem("ducky_campus_id") || 0);
 
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const [menuUsuarioAbierto, setMenuUsuarioAbierto] = useState(false);
   const [prestamos, setPrestamos] = useState([]);
   const [multas, setMultas] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -51,14 +50,6 @@ function MisPrestamos() {
     }
   };
 
-  const handleLogout = () => {
-    localStorage.removeItem("ducky_token");
-    localStorage.removeItem("ducky_role");
-    localStorage.removeItem("ducky_campus_id");
-    localStorage.removeItem("ducky_nombre");
-    navigate("/");
-  };
-
   const activos = prestamos.filter(p => p.loan_state === "active" || p.loan_state === "overdue");
   const historial = prestamos.filter(p => p.loan_state === "completed");
 
@@ -86,30 +77,7 @@ function MisPrestamos() {
 
       <div className="main-content">
 
-        <nav className="navbar">
-          <div className="navbar-left">
-            <button className="hamburger" onClick={() => setSidebarOpen(!sidebarOpen)}>☰</button>
-            <div className="navbar-logo">
-              <img src={duckIcon} alt="Ducky" className="navbar-duck-icon" />
-              <div className="navbar-logo-text">
-                <span className="navbar-ducky">Ducky</span>
-                <span className="navbar-university">University</span>
-              </div>
-            </div>
-          </div>
-          <div className="navbar-right">
-            <span style={{ cursor: "pointer" }} onClick={() => alert("Próximamente")}>Soporte</span>
-            <span style={{ cursor: "pointer" }} onClick={() => alert("Próximamente")}>Notificaciones</span>
-            <div style={{ position: "relative", cursor: "pointer", display: "inline-block" }} onClick={() => setMenuUsuarioAbierto(!menuUsuarioAbierto)}>
-              <span>Usuario</span>
-              {menuUsuarioAbierto && (
-                <div style={{ position: "absolute", top: "100%", right: 0, backgroundColor: "#fff", color: "#333", padding: "10px", borderRadius: "4px", boxShadow: "0 2px 5px rgba(0,0,0,0.2)", zIndex: 10, minWidth: "120px" }}>
-                  <button onClick={handleLogout} style={{ border: "none", background: "none", cursor: "pointer", color: "red", padding: "5px", width: "100%", textAlign: "left" }}>Cerrar sesión</button>
-                </div>
-              )}
-            </div>
-          </div>
-        </nav>
+        <TopBar onMenuClick={() => setSidebarOpen(!sidebarOpen)} />
 
         <div style={{ padding: "30px 48px" }}>
           <h2 style={{ fontSize: "1.6rem", fontWeight: "bold", marginBottom: "24px", color: "#1a1a1a" }}>Mis Préstamos</h2>
