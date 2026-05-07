@@ -16,23 +16,12 @@ Wait ~20 seconds for seeds to complete, then open any of the portals below.
 
 ## 🌐 Access URLs
 
-> **Note on local domains:** Docker `hostname` labels are set for documentation purposes. To use friendly domains (e.g. `lms.ducky.local`), add the entries below to your **Windows hosts file** (`C:\Windows\System32\drivers\etc\hosts`):
->
-> ```
-> 127.0.0.1   lms.ducky.local
-> 127.0.0.1   scholar.ducky.local
-> 127.0.0.1   hcapital.ducky.local
-> 127.0.0.1   treasury.ducky.local
-> ```
->
-> Without editing hosts, use the `localhost:port` addresses below.
-
-| Portal | Friendly Domain | Localhost URL | Description |
-|--------|----------------|---------------|-------------|
-| 📚 **Library LMS** | `http://lms.ducky.local:3000` | `http://localhost:3000` | Main library portal — login required |
-| 🎓 **Scholar Admin** | `http://scholar.ducky.local:3004` | `http://localhost:3004` | Academic records manager — no login |
-| 🏢 **Human Capital Admin** | `http://hcapital.ducky.local:3006` | `http://localhost:3006` | HR records manager — no login |
-| 💰 **Treasury Admin** | `http://treasury.ducky.local:3008` | `http://localhost:3008` | Finance and billing manager — no login |
+| Portal | URL | Description |
+|--------|-----|-------------|
+| 📚 **Library LMS** | `http://localhost:3000` | Main library portal — login required |
+| 🎓 **Scholar Admin** | `http://localhost:3004` | Academic records manager — no login |
+| 🏢 **Human Capital Admin** | `http://localhost:3006` | HR records manager — no login |
+| 💰 **Treasury Admin** | `http://localhost:3008` | Finance and billing manager — no login |
 
 ---
 
@@ -107,9 +96,9 @@ localhost:4000  →  bff-service        (API Gateway)
          (port 5433)        (port 5434)
 
 localhost:3004  →  scholar-frontend   → scholar-bff (4001) → scholar-ms (3003) → db-scholar (5435)
-                                                                      ↓ (on student create/update/delete)
+                                                                      ↓ (on employee/student create/update/delete)
                                                              registry-ms (3009) → db-registry (5438)
-
+                                                                      ↑ (on employee create/update/delete)
 localhost:3006  →  hcapital-frontend  → hcapital-bff (4002) → hcapital-ms (3005) → db-hcapital (5436)
 localhost:3008  →  treasury-frontend  → treasury-bff (4003) → treasury-ms (3007) → db-treasury (5437)
 ```
@@ -133,7 +122,7 @@ Connect with: `psql -h localhost -p <port> -U postgres -d <dbname>`
 
 ## 🗂️ Registry Service API
 
-The Registry microservice (`localhost:3009`) is the central catalog of all university affiliates and their service associations. It is updated automatically by the Scholar microservice whenever a student is created, updated, or disabled.
+The Registry microservice (`localhost:3009`) is the central catalog of all university affiliates and their service associations. It is updated automatically by the Scholar and Human Capital microservices whenever an employee or student is created, updated, or disabled.
 
 ### Queryable Endpoints
 
@@ -148,9 +137,9 @@ The Registry microservice (`localhost:3009`) is the central catalog of all unive
 
 | Method | URL | Triggered when... |
 |--------|-----|-------------------|
-| `POST` | `/api/register` | Scholar creates a new student → affiliate is registered and linked to scholar |
-| `POST` | `/api/deregister` | Scholar disables a student → association marked `is_operational = false` |
-| `POST` | `/api/update-email` | Scholar updates a student's email → `campus_email` is synced in registry |
+| `POST` | `/api/register` | A new student or employee is created → affiliate registered and linked to its service |
+| `POST` | `/api/deregister` | A student or employee is disabled → association marked `is_operational = false` |
+| `POST` | `/api/update-email` | A student or employee's email changes → `campus_email` synced in registry |
 | `DELETE` | `/api/affiliates/:campus_id` | Hard-delete an affiliate (admin use only) |
 
 ---
