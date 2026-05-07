@@ -1,3 +1,4 @@
+import { useSidebar } from "../hooks/useSidebar";
 import { useEffect, useState } from "react";
 import "./Home.css";
 import landingImage from "../assets/images/landingImage.png";
@@ -7,7 +8,7 @@ import { useNavigate, useLocation } from "react-router-dom";
 import { bffGet, bffPut, bffDelete, bffPost, getToken } from "../api/bff";
 
 function Home() {
-  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [sidebarOpen, setSidebarOpen] = useSidebar();
   const navigate = useNavigate();
   const location = useLocation();
   const [recursos, setRecursos] = useState([]);

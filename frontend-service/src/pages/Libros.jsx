@@ -1,3 +1,4 @@
+import { useSidebar } from "../hooks/useSidebar";
 import { useEffect, useState, useCallback, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import "./Usuarios.css";
@@ -104,7 +105,7 @@ function Libros() {
   const hasManagementRole = isAdmin || isLib;
   const isAlumno = !hasManagementRole;
 
-  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [sidebarOpen, setSidebarOpen] = useSidebar();
   const [recursos, setRecursos] = useState([]);
   const [loading, setLoading] = useState(false);
   const [busqueda, setBusqueda] = useState("");

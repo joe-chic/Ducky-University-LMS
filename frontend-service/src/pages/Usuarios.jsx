@@ -1,3 +1,4 @@
+import { useSidebar } from "../hooks/useSidebar";
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import "./Usuarios.css";
@@ -13,7 +14,7 @@ import { permisosIniciales } from "../data/Permisos";
 import { bffDelete, bffGet, bffPost, bffPut, getToken } from "../api/bff";
 
 function Usuarios() {
-  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [sidebarOpen, setSidebarOpen] = useSidebar();
   const [busqueda, setBusqueda] = useState("");
   const navigate = useNavigate();
   const [permisosOriginal] = useState(permisosIniciales);

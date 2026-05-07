@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
+import { useSidebar } from "../hooks/useSidebar";
 import { useNavigate } from "react-router-dom";
 import "./Prestamos.css";
 import Sidebar from "../components/Sidebar";
@@ -9,7 +10,7 @@ function Prestamos() {
   const navigate = useNavigate();
   const token = getToken();
 
-  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [sidebarOpen, setSidebarOpen] = useSidebar();
   const [tab, setTab] = useState("prestar");
 
   // Préstamo form

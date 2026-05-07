@@ -1,0 +1,19 @@
+const fs = require('fs');
+const files = [
+  'src/pages/Home.jsx',
+  'src/pages/LibroDetalle.jsx',
+  'src/pages/Libros.jsx',
+  'src/pages/Devoluciones.jsx',
+  'src/pages/MisPrestamos.jsx',
+  'src/pages/Usuarios.jsx'
+];
+
+for (const file of files) {
+  let content = fs.readFileSync(file, 'utf8');
+  if (!content.includes('useSidebar')) {
+    content = 'import { useSidebar } from "../hooks/useSidebar";\n' + content;
+    content = content.replace('const [sidebarOpen, setSidebarOpen] = useState(false);', 'const [sidebarOpen, setSidebarOpen] = useSidebar();');
+    fs.writeFileSync(file, content);
+  }
+}
+console.log("Success");

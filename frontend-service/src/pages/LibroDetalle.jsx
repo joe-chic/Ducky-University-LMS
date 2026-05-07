@@ -1,3 +1,4 @@
+import { useSidebar } from "../hooks/useSidebar";
 import { useEffect, useState } from "react";
 import { useNavigate, useLocation, useParams } from "react-router-dom";
 import "./Home.css";
@@ -187,7 +188,7 @@ function LibroDetalle() {
   // Only actual students/employees (non-management) can request loans online
   const isAlumno = !hasManagementRole;
 
-  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [sidebarOpen, setSidebarOpen] = useSidebar();
   const [libro, setLibro] = useState(null);
   const [ejemplares, setEjemplares] = useState([]);
   const [loading, setLoading] = useState(true);

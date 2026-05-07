@@ -1,3 +1,4 @@
+import { useSidebar } from "../hooks/useSidebar";
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import "./Home.css";
@@ -9,7 +10,7 @@ function MisPrestamos() {
   const navigate = useNavigate();
   const campusId = Number(localStorage.getItem("ducky_campus_id") || 0);
 
-  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [sidebarOpen, setSidebarOpen] = useSidebar();
   const [prestamos, setPrestamos] = useState([]);
   const [multas, setMultas] = useState([]);
   const [loading, setLoading] = useState(false);
