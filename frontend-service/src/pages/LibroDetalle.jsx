@@ -304,7 +304,7 @@ function LibroDetalle() {
   const enPrestamo  = ejemplares.filter(e => e.example_op_state === "on loan").length;
 
   // Only digital resources (e-books and digital articles) can be requested online.
-  const isDigital = libro => ["e_book", "digital_article"].includes(libro?.tipo);
+  const isDigital = libro => ["e_book", "digital_article", "e_journal"].includes(libro?.tipo);
 
   // ── Digital metadata state & fetch ──────────────────────────────────────────
   const [digitalMeta,   setDigitalMeta]   = useState(null);
@@ -385,12 +385,12 @@ function LibroDetalle() {
         <div className="libro-detalle-container">
 
           <div className="libro-breadcrumb">
-            <span onClick={() => navigate("/libros")} style={{ cursor: "pointer", color: "#b8860b" }}>Libros</span>
+            <span onClick={() => navigate(-1)} style={{ cursor: "pointer", color: "#b8860b" }}>Volver</span>
             <span> › </span>
             <span>{libro?.titulo || "Detalle"}</span>
           </div>
 
-          <button className="libro-back-btn" onClick={() => navigate("/libros")}>←</button>
+          <button className="libro-back-btn" onClick={() => navigate(-1)}>←</button>
 
           {loading ? (
             <div style={{ textAlign: "center", padding: "60px", color: "#666" }}>Cargando...</div>

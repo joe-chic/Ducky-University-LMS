@@ -420,7 +420,7 @@ function Libros() {
               value={filtros.tipo}
               onChange={v => { setFiltros(p => ({ ...p, tipo: v })); setPage(1); }}
               options={[
-                "book", "e_book", "digital_article", "journal_magazine",
+                "book", "e_book", "digital_article", "e_journal",
                 "thesis_dissertation", "reference", "video", "audio_music",
                 "conference_proceeding", "dataset", "software", "map", "manuscript"
               ]}
@@ -501,7 +501,7 @@ function Libros() {
                     <label className="detail-label">Tipo *</label>
                     <select className="modal-input" value={recursoEditando?.tipo || "book"} onChange={e => setRecursoEditando({ ...recursoEditando, tipo: e.target.value })}>
                       <option value="book">Book</option>
-                      <option value="journal_magazine">Journal / Magazine</option>
+                      <option value="e_journal">E-Journal</option>
                       <option value="thesis_dissertation">Thesis / Dissertation</option>
                       <option value="reference">Reference</option>
                       <option value="digital_article">Digital Article</option>
