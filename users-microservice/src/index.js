@@ -152,6 +152,7 @@ app.get("/users", authMiddleware, async (req, res) => {
 
     const result = await query(
       `SELECT u.user_id,
+              u.campus_id,
               u.user_email,
               u.user_phone,
               u.user_state,
@@ -170,6 +171,7 @@ app.get("/users", authMiddleware, async (req, res) => {
 
     const items = result.rows.map((u) => ({
       id: u.user_id,
+      campus_id: u.campus_id,
       nombre: buildUserFullName(u),
       rol: u.role_name,
       correo: u.user_email,

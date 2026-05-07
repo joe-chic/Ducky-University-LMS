@@ -95,7 +95,7 @@ function Prestamos() {
       setMsgDevolver(null);
       try {
         await bffPut(`/api/loans/${loan.loan_id}/return`, {}, { token });
-        setMsgDevolver({ type: "success", text: `Devolución registrada (Préstamo #${loan.loan_id})` });
+        setMsgDevolver({ type: "success", text: `Devolución exitosa (Préstamo #${loan.loan_id})` });
         fetchLoans();
       } catch (err) { setMsgDevolver({ type: "error", text: err.message || "Error al registrar la devolución." }); }
     }
@@ -163,7 +163,10 @@ function Prestamos() {
     l.titulo?.toLowerCase().includes(search.toLowerCase()) ||
     String(l.loan_id).includes(search) ||
     l.barcode?.toLowerCase().includes(search.toLowerCase()) ||
-    l.journal_title?.toLowerCase().includes(search.toLowerCase())
+    l.journal_title?.toLowerCase().includes(search.toLowerCase()) ||
+    l.user_name?.toLowerCase().includes(search.toLowerCase()) ||
+    l.user_email?.toLowerCase().includes(search.toLowerCase()) ||
+    String(l.campus_id).includes(search)
   );
 
   function stateBadge(state, loanType) {
@@ -315,7 +318,11 @@ function Prestamos() {
                                 {l.journal_title && <div style={{ fontSize: "0.75rem", color: "#888" }}>{l.journal_title} {l.journal_issn ? `· ISSN ${l.journal_issn}` : ""}</div>}
                                 {l.barcode && <code style={{ fontSize: "0.75rem", color: "#666" }}>{l.barcode}</code>}
                               </td>
-                              <td>{l.campus_id}</td>
+                              <td>
+                                <div style={{ fontWeight: 600, fontSize: "0.85rem" }}>{l.user_name}</div>
+                                <div style={{ fontSize: "0.75rem", color: "#666" }}>{l.user_email}</div>
+                                <div style={{ fontSize: "0.75rem", color: "#888" }}>ID: {l.campus_id}</div>
+                              </td>
                               <td>{formatDate(l.initial_lent_at)}</td>
                               <td><Pill {...sb} /></td>
                               <td>
@@ -407,7 +414,11 @@ function Prestamos() {
                               <div style={{ fontSize: "0.72rem", color: "#888" }}>Renovaciones: {l.renewal_count}</div>
                             )}
                           </td>
-                          <td>{l.campus_id}</td>
+                          <td>
+                            <div style={{ fontWeight: 600, fontSize: "0.85rem" }}>{l.user_name}</div>
+                            <div style={{ fontSize: "0.75rem", color: "#666" }}>{l.user_email}</div>
+                            <div style={{ fontSize: "0.75rem", color: "#888" }}>ID: {l.campus_id}</div>
+                          </td>
                           <td>{formatDate(l.initial_lent_at)}</td>
                           <td>{l.returned_at ? formatDate(l.returned_at) : "—"}</td>
                           <td><Pill {...sb} /></td>

@@ -339,12 +339,28 @@ app.get("/api/all-loans", async (req, res) => {
       ? (Array.isArray(digRes.value.data?.items) ? digRes.value.data.items : [])
       : []);
 
+    // Fetch users for mapping
+    const token = req.headers.authorization;
+    const usersRes = await axios.get(`${USERS_BASE_URL}/users`, {
+        params: { pageSize: 10000 },
+        headers: token ? { Authorization: token } : {},
+        timeout: 10000
+    }).catch(() => ({ data: { items: [] } }));
+    
+    const usersList = Array.isArray(usersRes.data?.items) ? usersRes.data.items : [];
+    const usersMap = {};
+    usersList.forEach(u => {
+        if (u.campus_id) usersMap[u.campus_id] = { name: u.nombre, email: u.correo };
+    });
+
     // Normalise to unified shape
     const normPhysical = physical.map(l => ({
       loan_id:         l.loan_id,
       loan_type:       "physical",
       state:           l.loan_state,
       campus_id:       l.campus_id,
+      user_name:       usersMap[l.campus_id]?.name || "Desconocido",
+      user_email:      usersMap[l.campus_id]?.email || "Sin correo",
       titulo:          l.titulo,
       tipo:            "physical_book",
       barcode:         l.barcode,
@@ -358,6 +374,8 @@ app.get("/api/all-loans", async (req, res) => {
       loan_type:       "digital",
       state:           l.digital_loan_state,
       campus_id:       l.campus_id,
+      user_name:       usersMap[l.campus_id]?.name || "Desconocido",
+      user_email:      usersMap[l.campus_id]?.email || "Sin correo",
       titulo:          l.titulo,
       tipo:            l.tipo,
       barcode:         null,
