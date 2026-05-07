@@ -735,24 +735,38 @@ app.put("/examples/:barcode/damage-details", async (req, res) => {
         [health_state, barcode]
       );
     }
-    if (damage_type && severity_level) {
+    if (health_state === "lost") {
       await client.query(
-        `INSERT INTO damaged_resource_details(barcode, damage_type, severity_level, librarian_notes)
-         VALUES($1,$2,$3,$4)
-         ON CONFLICT(barcode) DO UPDATE SET damage_type=$2, severity_level=$3, librarian_notes=$4`,
-        [barcode, damage_type, severity_level, librarian_notes || ""]
+        `INSERT INTO lost_resource_details(barcode, librarian_notes)
+         VALUES($1,$2)
+         ON CONFLICT(barcode) DO UPDATE SET librarian_notes=$2`,
+        [barcode, librarian_notes || ""]
       );
-    } else if (librarian_notes !== undefined) {
-      await client.query(
-        `UPDATE damaged_resource_details SET librarian_notes=$1 WHERE barcode=$2`,
-        [librarian_notes, barcode]
-      );
+      await client.query(`DELETE FROM damaged_resource_details WHERE barcode=$1`, [barcode]);
+    } else {
+      if (damage_type && severity_level) {
+        await client.query(
+          `INSERT INTO damaged_resource_details(barcode, damage_type, severity_level, librarian_notes)
+           VALUES($1,$2,$3,$4)
+           ON CONFLICT(barcode) DO UPDATE SET damage_type=$2, severity_level=$3, librarian_notes=$4`,
+          [barcode, damage_type, severity_level, librarian_notes || ""]
+        );
+      } else if (librarian_notes !== undefined) {
+        await client.query(
+          `INSERT INTO damaged_resource_details(barcode, damage_type, severity_level, librarian_notes)
+           VALUES($1, '', 'low', $2)
+           ON CONFLICT(barcode) DO UPDATE SET librarian_notes=$2`,
+          [barcode, librarian_notes]
+        );
+      }
+      await client.query(`DELETE FROM lost_resource_details WHERE barcode=$1`, [barcode]);
     }
     await client.query("COMMIT");
     const r = await query(
-      `SELECT pe.*, drd.damage_type, drd.severity_level, drd.librarian_notes AS damage_notes
+      `SELECT pe.*, drd.damage_type, drd.severity_level, drd.librarian_notes AS damage_notes, lrd.librarian_notes AS lost_notes
        FROM physical_examples pe
        LEFT JOIN damaged_resource_details drd ON drd.barcode = pe.barcode
+       LEFT JOIN lost_resource_details lrd ON lrd.barcode = pe.barcode
        WHERE pe.barcode = $1`, [barcode]
     );
     res.json(r.rows[0]);

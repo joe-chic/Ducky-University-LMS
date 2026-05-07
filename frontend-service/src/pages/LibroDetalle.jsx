@@ -37,8 +37,8 @@ function EjemplarRow({ ej, badgeColor, badgeLabel, healthColor, hasManagementRol
       setForm({
         health_state:    d.example_health_state,
         damage_type:     d.damage_type     || "",
-        severity_level:  d.severity_level  || "low",
-        librarian_notes: d.damage_notes    || "",
+        severity_level:  d.severity_level  || "",
+        librarian_notes: (d.example_health_state === "lost" ? d.lost_notes : d.damage_notes) || "",
       });
     } catch { setRowMsg("Error al cargar detalles."); }
     finally   { setLoading(false); }
@@ -124,20 +124,32 @@ function EjemplarRow({ ej, badgeColor, badgeLabel, healthColor, hasManagementRol
                   <form onSubmit={handleSave} style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "8px", background: "#f0f4ff", borderRadius: "8px", padding: "12px" }}>
                     <label style={{ fontSize: "0.8rem", fontWeight: 600 }}>Estado físico
                       <select style={{ display: "block", width: "100%", marginTop: "3px", padding: "5px 7px", borderRadius: "4px", border: "1px solid #ccc", fontSize: "0.82rem" }}
-                        value={form.health_state} onChange={e => setForm(f => ({ ...f, health_state: e.target.value }))}>
+                        value={form.health_state} onChange={e => {
+                          const val = e.target.value;
+                          setForm(f => {
+                            if (val === "lost" || val === "good") {
+                              return { ...f, health_state: val, damage_type: "", severity_level: "" };
+                            } else {
+                              return { ...f, health_state: val, damage_type: f.damage_type || DAMAGE_TYPES[0], severity_level: f.severity_level || SEVERITIES[0] };
+                            }
+                          });
+                        }}>
                         {HEALTH_STATES.map(v => <option key={v} value={v}>{v}</option>)}
                       </select>
                     </label>
                     <label style={{ fontSize: "0.8rem", fontWeight: 600 }}>Tipo de daño
                       <select style={{ display: "block", width: "100%", marginTop: "3px", padding: "5px 7px", borderRadius: "4px", border: "1px solid #ccc", fontSize: "0.82rem" }}
+                        disabled={form.health_state === "lost" || form.health_state === "good"}
                         value={form.damage_type} onChange={e => setForm(f => ({ ...f, damage_type: e.target.value }))}>
-                        <option value="">— Ninguno —</option>
+                        {(form.health_state === "lost" || form.health_state === "good") && <option value="">— Ninguno —</option>}
                         {DAMAGE_TYPES.map(v => <option key={v} value={v}>{v}</option>)}
                       </select>
                     </label>
                     <label style={{ fontSize: "0.8rem", fontWeight: 600 }}>Severidad
                       <select style={{ display: "block", width: "100%", marginTop: "3px", padding: "5px 7px", borderRadius: "4px", border: "1px solid #ccc", fontSize: "0.82rem" }}
+                        disabled={form.health_state === "lost" || form.health_state === "good"}
                         value={form.severity_level} onChange={e => setForm(f => ({ ...f, severity_level: e.target.value }))}>
+                        {(form.health_state === "lost" || form.health_state === "good") && <option value="">— Ninguna —</option>}
                         {SEVERITIES.map(v => <option key={v} value={v}>{v}</option>)}
                       </select>
                     </label>
