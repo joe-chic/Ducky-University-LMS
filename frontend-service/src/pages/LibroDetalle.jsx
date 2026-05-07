@@ -14,9 +14,12 @@ function LibroDetalle() {
   const userRole = localStorage.getItem("ducky_role");
   const campusId = Number(localStorage.getItem("ducky_campus_id") || 0);
   const isAdmin = userRole === "Administrador";
-  const isLib = userRole === "Bibliotecario";
+  const isLib   = userRole === "Bibliotecario";
   const hasManagementRole = isAdmin || isLib;
+  // Only actual students/employees (non-management) can request loans online
   const isAlumno = !hasManagementRole;
+  // Only e-books and digital articles can be requested online
+  const isDigital = (libro) => libro && ["e_book", "digital_article"].includes(libro.tipo);
 
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [libro, setLibro] = useState(null);
