@@ -244,3 +244,61 @@ services:
     depends_on: [human-capital-bff-service]
     ports: ["3006:3006"]
     hostname: hcapital.ducky.local
+
+  db-treasury:
+    image: postgres:16
+    environment:
+      POSTGRES_DB: ducky_treasury_db
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    ports:
+      - "5437:5432"
+
+  seed-treasury:
+    image: postgres:16
+    restart: "no"
+    depends_on:
+      - db-treasury
+    environment:
+      PGHOST: db-treasury
+      PGPORT: 5432
+      PGDATABASE: ducky_treasury_db
+      PGUSER: postgres
+      PGPASSWORD: postgres
+    volumes:
+      - ./db/ducky_treasury_db/ducky_treasury_db.sql:/seed/schema.sql
+      - ./db/ducky_treasury_db/ducky_treasury_db_dummy_data.sql:/seed/data.sql
+    command: >
+      sh -c "until psql -h $$PGHOST -p $$PGPORT -U $$PGUSER -d $$PGDATABASE -c 'select 1' >/dev/null 2>&1; do sleep 1; done;
+      sed -e '/^CREATE DATABASE /d' -e '/^\\\\c /d' /seed/schema.sql | psql -h $$PGHOST -p $$PGPORT -U $$PGUSER -d $$PGDATABASE;
+      sed -e '/^\\\\c /d' /seed/data.sql | psql -v ON_ERROR_STOP=0 -h $$PGHOST -p $$PGPORT -U $$PGUSER -d $$PGDATABASE"
+
+  treasury-microservice:
+    build: ./treasury-microservice
+    environment:
+      PORT: 3007
+      PGHOST: db-treasury
+      PGPORT: 5432
+      PGDATABASE: ducky_treasury_db
+      PGUSER: postgres
+      PGPASSWORD: postgres
+    depends_on:
+      - db-treasury
+      - seed-treasury
+    ports: ["3007:3007"]
+
+  treasury-bff-service:
+    build: ./treasury-bff-service
+    environment:
+      PORT: 4003
+      TREASURY_BASE_URL: http://treasury-microservice:3007
+    depends_on: [treasury-microservice]
+    ports: ["4003:4003"]
+
+  treasury-frontend:
+    build: ./treasury-frontend
+    environment:
+      PORT: 3008
+    depends_on: [treasury-bff-service]
+    ports: ["3008:3008"]
+    hostname: treasury.ducky.local

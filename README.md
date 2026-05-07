@@ -22,6 +22,7 @@ Wait ~20 seconds for seeds to complete, then open any of the portals below.
 > 127.0.0.1   lms.ducky.local
 > 127.0.0.1   scholar.ducky.local
 > 127.0.0.1   hcapital.ducky.local
+> 127.0.0.1   treasury.ducky.local
 > ```
 >
 > Without editing hosts, use the `localhost:port` addresses below.
@@ -31,6 +32,7 @@ Wait ~20 seconds for seeds to complete, then open any of the portals below.
 | 📚 **Library LMS** | `http://lms.ducky.local:3000` | `http://localhost:3000` | Main library portal — login required |
 | 🎓 **Scholar Admin** | `http://scholar.ducky.local:3004` | `http://localhost:3004` | Academic records manager — no login |
 | 🏢 **Human Capital Admin** | `http://hcapital.ducky.local:3006` | `http://localhost:3006` | HR records manager — no login |
+| 💰 **Treasury Admin** | `http://treasury.ducky.local:3008` | `http://localhost:3008` | Finance and billing manager — no login |
 
 ---
 
@@ -103,6 +105,7 @@ localhost:4000  →  bff-service        (API Gateway)
 
 localhost:3004  →  scholar-frontend   → scholar-bff (4001) → scholar-ms (3003) → db-scholar (5435)
 localhost:3006  →  hcapital-frontend  → hcapital-bff (4002) → hcapital-ms (3005) → db-hcapital (5436)
+localhost:3008  →  treasury-frontend  → treasury-bff (4003) → treasury-ms (3007) → db-treasury (5437)
 ```
 
 ---
@@ -115,6 +118,7 @@ localhost:3006  →  hcapital-frontend  → hcapital-bff (4002) → hcapital-ms 
 | Library DB | `5434` | `ducky_library_db` |
 | Scholar DB | `5435` | `ducky_scholar_db` |
 | Human Capital DB | `5436` | `ducky_human_capital_db` |
+| Treasury DB | `5437` | `ducky_treasury_db` |
 
 Connect with: `psql -h localhost -p <port> -U postgres -d <dbname>`
 
