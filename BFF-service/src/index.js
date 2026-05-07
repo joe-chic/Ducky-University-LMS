@@ -312,6 +312,36 @@ app.put("/api/fines/:id", (req, res) => proxyTreasury(req, res, `/fines/${req.pa
 app.post("/api/fines/:id/pay", (req, res) => proxyTreasury(req, res, `/fines/${req.params.id}/pay`, "POST"));
 app.get("/api/daily-fine", (req, res) => proxyTreasury(req, res, "/daily-fine", "GET"));
 
+// ── Physical loan renewal & damage details ───────────────────────────────────
+app.post("/api/loans/:id/renew", async (req, res) => {
+  try {
+    const r = await axios.post(`${LIBRARY_BASE_URL}/loans/${req.params.id}/renew`, {}, { timeout: 8000 });
+    res.json(r.data);
+  } catch (err) {
+    res.status(err?.response?.status || 500).json({ message: err?.response?.data?.message || "Error al renovar préstamo" });
+  }
+});
+
+app.get("/api/examples/:barcode/damage-details", async (req, res) => {
+  try {
+    const r = await axios.get(`${LIBRARY_BASE_URL}/examples/${req.params.barcode}/damage-details`, { timeout: 8000 });
+    res.json(r.data);
+  } catch (err) {
+    res.status(err?.response?.status || 500).json({ message: err?.response?.data?.message || "Error al obtener detalles del ejemplar" });
+  }
+});
+
+app.put("/api/examples/:barcode/damage-details", async (req, res) => {
+  try {
+    const r = await axios.put(`${LIBRARY_BASE_URL}/examples/${req.params.barcode}/damage-details`, req.body, {
+      headers: { "Content-Type": "application/json" }, timeout: 8000,
+    });
+    res.json(r.data);
+  } catch (err) {
+    res.status(err?.response?.status || 500).json({ message: err?.response?.data?.message || "Error al actualizar detalles del ejemplar" });
+  }
+});
+
 // ── Digital resource endpoints ────────────────────────────────────────────────
 app.get("/api/resources/:id/digital-metadata", async (req, res) => {
   try {

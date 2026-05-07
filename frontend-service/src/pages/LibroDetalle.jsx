@@ -6,6 +6,162 @@ import Sidebar from "../components/Sidebar";
 import TopBar from "../components/TopBar";
 import { bffGet, bffPut, bffPost, getToken } from "../api/bff";
 
+// ── EjemplarRow ───────────────────────────────────────────────────────────────
+// Renders one physical example row. Management users get an expandable panel
+// with full damage/lost detail and an inline editor.
+function EjemplarRow({ ej, badgeColor, badgeLabel, healthColor, hasManagementRole, token }) {
+  const [open,        setOpen]        = useState(false);
+  const [detail,      setDetail]      = useState(null);
+  const [loading,     setLoading]     = useState(false);
+  const [editMode,    setEditMode]    = useState(false);
+  const [form,        setForm]        = useState({});
+  const [saving,      setSaving]      = useState(false);
+  const [rowMsg,      setRowMsg]      = useState(null);
+
+  const DAMAGE_TYPES = [
+    "torn pages","foxing","cockling","dog-eared","staining/decoloration",
+    "broken/loose spine","damaged cover","crushed corner","hinge damaged",
+    "mold","pest damage","light damage","annotations/markings","improper repair","shelf wear",
+  ];
+  const SEVERITIES   = ["low","medium","high"];
+  const HEALTH_STATES = ["good","damaged","incomplete","lost"];
+
+  async function toggleDetail() {
+    if (open) { setOpen(false); return; }
+    setOpen(true);
+    if (detail) return;
+    setLoading(true);
+    try {
+      const d = await bffGet(`/api/examples/${ej.barcode}/damage-details`, { token });
+      setDetail(d);
+      setForm({
+        health_state:    d.example_health_state,
+        damage_type:     d.damage_type     || "",
+        severity_level:  d.severity_level  || "low",
+        librarian_notes: d.damage_notes    || "",
+      });
+    } catch { setRowMsg("Error al cargar detalles."); }
+    finally   { setLoading(false); }
+  }
+
+  async function handleSave(e) {
+    e.preventDefault();
+    setSaving(true); setRowMsg(null);
+    try {
+      const updated = await bffPut(`/api/examples/${ej.barcode}/damage-details`, form, { token });
+      setDetail(updated);
+      setEditMode(false);
+      setRowMsg("✓ Guardado correctamente.");
+    } catch (err) { setRowMsg(err.message || "Error al guardar."); }
+    finally      { setSaving(false); }
+  }
+
+  const cellStyle  = { padding: "8px 12px", color: "#555" };
+  const monoStyle  = { padding: "8px 12px", fontFamily: "monospace", fontSize: "0.85rem", color: "#333" };
+
+  return (
+    <>
+      <tr style={{ borderBottom: open ? "none" : "1px solid #eee" }}>
+        <td style={monoStyle}>{ej.barcode}</td>
+        <td style={cellStyle}>{ej.example_location_code}</td>
+        {hasManagementRole && (
+          <td style={{ ...cellStyle, textTransform: "capitalize", color: healthColor, fontWeight: 600 }}>
+            {ej.example_health_state}
+          </td>
+        )}
+        <td style={cellStyle}>
+          <span style={{ background: badgeColor, color: "#fff", borderRadius: "12px", padding: "3px 10px", fontSize: "0.78rem", fontWeight: 600 }}>
+            {badgeLabel}
+          </span>
+        </td>
+        {hasManagementRole && (
+          <td style={cellStyle}>
+            <button
+              onClick={toggleDetail}
+              style={{ padding: "4px 10px", fontSize: "0.78rem", border: "1px solid #bbb", borderRadius: "5px", cursor: "pointer", background: open ? "#e8eaf6" : "#f5f5f5" }}
+            >
+              {open ? "▲ Cerrar" : "▼ Ver Detalle"}
+            </button>
+          </td>
+        )}
+      </tr>
+
+      {/* Expandable damage detail panel */}
+      {hasManagementRole && open && (
+        <tr>
+          <td colSpan={5} style={{ padding: "0 12px 16px 12px", background: "#fafbff", borderBottom: "2px solid #e3e8f0" }}>
+            {loading && <p style={{ color: "#888", fontSize: "0.85rem" }}>Cargando…</p>}
+            {rowMsg  && <p style={{ color: rowMsg.startsWith("✓") ? "#2e7d32" : "#c62828", fontSize: "0.82rem", margin: "6px 0" }}>{rowMsg}</p>}
+            {detail && !loading && (
+              <div style={{ paddingTop: "10px" }}>
+                {/* Info cards */}
+                <div style={{ display: "flex", gap: "10px", flexWrap: "wrap", marginBottom: "10px" }}>
+                  {[
+                    ["Estado físico",   detail.example_health_state  || "—"],
+                    ["Tipo de daño",    detail.damage_type            || "—"],
+                    ["Severidad",       detail.severity_level         || "—"],
+                    ["Notas de daño",   detail.damage_notes           || "—"],
+                    ["Notas de pérd.",  detail.lost_notes             || "—"],
+                    ["Prestado a",      detail.borrower_id            ? `campus_id: ${detail.borrower_id}` : "—"],
+                    ["Renovaciones",    detail.renewal_count != null  ? `${detail.renewal_count}` : "—"],
+                  ].map(([label, val]) => (
+                    <div key={label} style={{ background: "#f0f4ff", borderRadius: "7px", padding: "7px 12px", minWidth: "110px", border: "1px solid #dde3f5" }}>
+                      <div style={{ fontSize: "0.68rem", color: "#888" }}>{label}</div>
+                      <div style={{ fontWeight: 600, fontSize: "0.83rem", textTransform: "capitalize" }}>{val}</div>
+                    </div>
+                  ))}
+                </div>
+
+                {/* Edit toggle */}
+                <button
+                  onClick={() => setEditMode(v => !v)}
+                  style={{ padding: "5px 12px", fontSize: "0.8rem", border: "1px solid #8fa8e0", borderRadius: "5px", cursor: "pointer", background: "#e8eaf6", marginBottom: "8px" }}
+                >
+                  {editMode ? "Cancelar" : "✏️ Editar"}
+                </button>
+
+                {editMode && (
+                  <form onSubmit={handleSave} style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "8px", background: "#f0f4ff", borderRadius: "8px", padding: "12px" }}>
+                    <label style={{ fontSize: "0.8rem", fontWeight: 600 }}>Estado físico
+                      <select style={{ display: "block", width: "100%", marginTop: "3px", padding: "5px 7px", borderRadius: "4px", border: "1px solid #ccc", fontSize: "0.82rem" }}
+                        value={form.health_state} onChange={e => setForm(f => ({ ...f, health_state: e.target.value }))}>
+                        {HEALTH_STATES.map(v => <option key={v} value={v}>{v}</option>)}
+                      </select>
+                    </label>
+                    <label style={{ fontSize: "0.8rem", fontWeight: 600 }}>Tipo de daño
+                      <select style={{ display: "block", width: "100%", marginTop: "3px", padding: "5px 7px", borderRadius: "4px", border: "1px solid #ccc", fontSize: "0.82rem" }}
+                        value={form.damage_type} onChange={e => setForm(f => ({ ...f, damage_type: e.target.value }))}>
+                        <option value="">— Ninguno —</option>
+                        {DAMAGE_TYPES.map(v => <option key={v} value={v}>{v}</option>)}
+                      </select>
+                    </label>
+                    <label style={{ fontSize: "0.8rem", fontWeight: 600 }}>Severidad
+                      <select style={{ display: "block", width: "100%", marginTop: "3px", padding: "5px 7px", borderRadius: "4px", border: "1px solid #ccc", fontSize: "0.82rem" }}
+                        value={form.severity_level} onChange={e => setForm(f => ({ ...f, severity_level: e.target.value }))}>
+                        {SEVERITIES.map(v => <option key={v} value={v}>{v}</option>)}
+                      </select>
+                    </label>
+                    <label style={{ gridColumn: "1/-1", fontSize: "0.8rem", fontWeight: 600 }}>Notas del bibliotecario
+                      <textarea rows={2} style={{ display: "block", width: "100%", marginTop: "3px", padding: "5px 7px", borderRadius: "4px", border: "1px solid #ccc", fontSize: "0.82rem", resize: "vertical", boxSizing: "border-box" }}
+                        value={form.librarian_notes} onChange={e => setForm(f => ({ ...f, librarian_notes: e.target.value }))} />
+                    </label>
+                    <div style={{ gridColumn: "1/-1" }}>
+                      <button type="submit" disabled={saving}
+                        style={{ padding: "6px 16px", background: "#3f51b5", color: "#fff", border: "none", borderRadius: "5px", fontWeight: 700, cursor: "pointer", fontSize: "0.82rem" }}>
+                        {saving ? "Guardando…" : "Guardar Cambios"}
+                      </button>
+                    </div>
+                  </form>
+                )}
+              </div>
+            )}
+          </td>
+        </tr>
+      )}
+    </>
+  );
+}
+
 function LibroDetalle() {
   const { id } = useParams();
   const navigate = useNavigate();
@@ -325,8 +481,9 @@ function LibroDetalle() {
                           <tr style={{ background: "#f5f5f5", borderBottom: "2px solid #e0e0e0" }}>
                             <th style={{ padding: "8px 12px", textAlign: "left", fontWeight: 600, color: "#555" }}>Código de Barras</th>
                             <th style={{ padding: "8px 12px", textAlign: "left", fontWeight: 600, color: "#555" }}>Ubicación</th>
-                            <th style={{ padding: "8px 12px", textAlign: "left", fontWeight: 600, color: "#555" }}>Estado Físico</th>
+                            {hasManagementRole && <th style={{ padding: "8px 12px", textAlign: "left", fontWeight: 600, color: "#555" }}>Estado Físico</th>}
                             <th style={{ padding: "8px 12px", textAlign: "left", fontWeight: 600, color: "#555" }}>Disponibilidad</th>
+                            {hasManagementRole && <th style={{ padding: "8px 12px", textAlign: "left", fontWeight: 600, color: "#555" }}>Detalle</th>}
                           </tr>
                         </thead>
                         <tbody>
@@ -334,15 +491,19 @@ function LibroDetalle() {
                             const opState = ej.example_op_state;
                             const badgeColor = opState === "available" ? "#2E8B57" : opState === "on loan" ? "#b71c1c" : "#795548";
                             const badgeLabel = opState === "available" ? "Disponible" : opState === "on loan" ? "En Préstamo" : opState === "reserved" ? "Reservado" : opState === "internal consultation only" ? "Consulta Interna" : "En Tránsito";
+                            const healthColor = ej.example_health_state === "good" ? "#2e7d32" : ej.example_health_state === "damaged" ? "#e65100" : ej.example_health_state === "lost" ? "#b71c1c" : "#666";
                             return (
-                              <tr key={ej.barcode || i} style={{ borderBottom: "1px solid #eee" }}>
-                                <td style={{ padding: "8px 12px", fontFamily: "monospace", fontSize: "0.85rem", color: "#333" }}>{ej.barcode}</td>
-                                <td style={{ padding: "8px 12px", color: "#555" }}>{ej.example_location_code}</td>
-                                <td style={{ padding: "8px 12px", textTransform: "capitalize", color: "#666" }}>{ej.example_health_state}</td>
-                                <td style={{ padding: "8px 12px" }}>
-                                  <span style={{ background: badgeColor, color: "#fff", borderRadius: "12px", padding: "3px 10px", fontSize: "0.78rem", fontWeight: 600 }}>{badgeLabel}</span>
-                                </td>
-                              </tr>
+                              <EjemplarRow
+                                key={ej.barcode || i}
+                                ej={ej}
+                                badgeColor={badgeColor}
+                                badgeLabel={badgeLabel}
+                                healthColor={healthColor}
+                                hasManagementRole={hasManagementRole}
+                                token={getToken()}
+                                bffGet={bffGet}
+                                bffPut={bffPut}
+                              />
                             );
                           })}
                         </tbody>

@@ -107,6 +107,18 @@ function Prestamos() {
     }
   }
 
+  async function handleRenovar(loanId) {
+    if (!window.confirm(`¿Renovar el préstamo #${loanId}? Esto reiniciará su estado a activo.`)) return;
+    setMsgDevolver(null);
+    try {
+      const res = await bffPost(`/api/loans/${loanId}/renew`, {}, { token });
+      setMsgDevolver({ type: "success", text: `Préstamo #${loanId} renovado (renovación #${res.renewal_count}).` });
+      fetchLoans();
+    } catch (err) {
+      setMsgDevolver({ type: "error", text: err.message || "Error al renovar el préstamo." });
+    }
+  }
+
   function abrirModalMulta(loan) {
     const dias = loan.initial_lent_at
       ? Math.max(1, Math.floor((Date.now() - new Date(loan.initial_lent_at)) / (1000 * 60 * 60 * 24)))
@@ -301,6 +313,11 @@ function Prestamos() {
                           <div style={{ display: "flex", gap: 6 }}>
                             {l.loan_state !== "completed" && (
                               <button className="btn-return" onClick={() => handleDevolver(l.loan_id)}>Devolver</button>
+                            )}
+                            {l.loan_state !== "completed" && (
+                              <button onClick={() => handleRenovar(l.loan_id)} style={{ padding: "6px 14px", background: "#1565c0", color: "white", border: "none", borderRadius: "6px", fontSize: "0.82rem", fontWeight: "600", cursor: "pointer" }}>
+                                Renovar
+                              </button>
                             )}
                             {l.loan_state !== "completed" && (
                               <button onClick={() => abrirModalMulta(l)} style={{ padding: "6px 14px", background: "#c62828", color: "white", border: "none", borderRadius: "6px", fontSize: "0.82rem", fontWeight: "600", cursor: "pointer" }}>

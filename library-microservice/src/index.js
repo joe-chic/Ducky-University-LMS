@@ -643,6 +643,92 @@ app.put("/loans/:id/return", async (req, res) => {
   }
 });
 
+
+// POST /loans/:id/renew — renovar prestamo fisico
+app.post("/loans/:id/renew", async (req, res) => {
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    const loan_id = Number(req.params.id);
+    const loan = await client.query(
+      `SELECT pl.* FROM physical_loans pl WHERE pl.loan_id=$1 AND pl.loan_state IN ('active','overdue')`, [loan_id]
+    );
+    if (!loan.rows.length) return res.status(404).json({ message: "Prestamo activo no encontrado" });
+    const now = new Date();
+    await client.query(`INSERT INTO physical_loan_renewals(loan_id, renewal_lent_at) VALUES($1,$2)`, [loan_id, now]);
+    await client.query(`UPDATE physical_loans SET loan_state='active', latest_modified_at=$2, latest_modified_by=1 WHERE loan_id=$1`, [loan_id, now]);
+    await client.query("COMMIT");
+    const renewals = await query(`SELECT COUNT(*)::int AS cnt FROM physical_loan_renewals WHERE loan_id=$1`, [loan_id]);
+    res.json({ ok: true, loan_id, renewal_count: renewals.rows[0].cnt, renewed_at: now });
+  } catch (err) {
+    await client.query("ROLLBACK");
+    console.error(err);
+    res.status(500).json({ message: err.message });
+  } finally { client.release(); }
+});
+
+// GET /examples/:barcode/damage-details
+app.get("/examples/:barcode/damage-details", async (req, res) => {
+  try {
+    const { barcode } = req.params;
+    const ex = await query(
+      `SELECT pe.*,
+              drd.damage_type, drd.severity_level, drd.librarian_notes AS damage_notes,
+              lrd.librarian_notes AS lost_notes,
+              pl.loan_id, pl.campus_id AS borrower_id, pl.initial_lent_at, pl.loan_state,
+              (SELECT COUNT(*)::int FROM physical_loan_renewals plr WHERE plr.loan_id = pl.loan_id) AS renewal_count
+       FROM physical_examples pe
+       LEFT JOIN damaged_resource_details drd ON drd.barcode = pe.barcode
+       LEFT JOIN lost_resource_details    lrd ON lrd.barcode = pe.barcode
+       LEFT JOIN physical_loans pl ON pl.barcode = pe.barcode AND pl.loan_state IN ('active','overdue')
+       WHERE pe.barcode = $1
+       LIMIT 1`, [barcode]
+    );
+    if (!ex.rows.length) return res.status(404).json({ message: "Ejemplar no encontrado" });
+    res.json(ex.rows[0]);
+  } catch (err) { console.error(err); res.status(500).json({ error: err.message }); }
+});
+
+// PUT /examples/:barcode/damage-details — upsert damage notes (librarian/admin)
+app.put("/examples/:barcode/damage-details", async (req, res) => {
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    const { barcode } = req.params;
+    const { damage_type, severity_level, librarian_notes, health_state } = req.body;
+    if (health_state) {
+      await client.query(
+        `UPDATE physical_examples SET example_health_state=$1, latest_modified_at=NOW() WHERE barcode=$2`,
+        [health_state, barcode]
+      );
+    }
+    if (damage_type && severity_level) {
+      await client.query(
+        `INSERT INTO damaged_resource_details(barcode, damage_type, severity_level, librarian_notes)
+         VALUES($1,$2,$3,$4)
+         ON CONFLICT(barcode) DO UPDATE SET damage_type=$2, severity_level=$3, librarian_notes=$4`,
+        [barcode, damage_type, severity_level, librarian_notes || ""]
+      );
+    } else if (librarian_notes !== undefined) {
+      await client.query(
+        `UPDATE damaged_resource_details SET librarian_notes=$1 WHERE barcode=$2`,
+        [librarian_notes, barcode]
+      );
+    }
+    await client.query("COMMIT");
+    const r = await query(
+      `SELECT pe.*, drd.damage_type, drd.severity_level, drd.librarian_notes AS damage_notes
+       FROM physical_examples pe
+       LEFT JOIN damaged_resource_details drd ON drd.barcode = pe.barcode
+       WHERE pe.barcode = $1`, [barcode]
+    );
+    res.json(r.rows[0]);
+  } catch (err) {
+    await client.query("ROLLBACK");
+    console.error(err);
+    res.status(500).json({ error: err.message });
+  } finally { client.release(); }
+});
 // ─────────────────────────────────────────────────────────────────────────────
 // DIGITAL RESOURCES
 // ─────────────────────────────────────────────────────────────────────────────
