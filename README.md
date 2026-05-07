@@ -104,6 +104,9 @@ localhost:4000  →  bff-service        (API Gateway)
          (port 5433)        (port 5434)
 
 localhost:3004  →  scholar-frontend   → scholar-bff (4001) → scholar-ms (3003) → db-scholar (5435)
+                                                                      ↓ (on student create/update/delete)
+                                                             registry-ms (3009) → db-registry (5438)
+
 localhost:3006  →  hcapital-frontend  → hcapital-bff (4002) → hcapital-ms (3005) → db-hcapital (5436)
 localhost:3008  →  treasury-frontend  → treasury-bff (4003) → treasury-ms (3007) → db-treasury (5437)
 ```
@@ -119,8 +122,33 @@ localhost:3008  →  treasury-frontend  → treasury-bff (4003) → treasury-ms 
 | Scholar DB | `5435` | `ducky_scholar_db` |
 | Human Capital DB | `5436` | `ducky_human_capital_db` |
 | Treasury DB | `5437` | `ducky_treasury_db` |
+| Registry DB | `5438` | `service_registry_db` |
 
 Connect with: `psql -h localhost -p <port> -U postgres -d <dbname>`
+
+---
+
+## 🗂️ Registry Service API
+
+The Registry microservice (`localhost:3009`) is the central catalog of all university affiliates and their service associations. It is updated automatically by the Scholar microservice whenever a student is created, updated, or disabled.
+
+### Queryable Endpoints
+
+| Method | URL | Description |
+|--------|-----|-------------|
+| `GET` | `http://localhost:3009/api/affiliates` | Paginated list of all affiliates with their service associations |
+| `GET` | `http://localhost:3009/api/affiliates/:campus_id` | Single affiliate record by campus ID |
+| `GET` | `http://localhost:3009/api/services` | List all registered microservices |
+| `GET` | `http://localhost:3009/api/health` | Health check |
+
+### Internal Endpoints (called by microservices)
+
+| Method | URL | Triggered when... |
+|--------|-----|-------------------|
+| `POST` | `/api/register` | Scholar creates a new student → affiliate is registered and linked to scholar |
+| `POST` | `/api/deregister` | Scholar disables a student → association marked `is_operational = false` |
+| `POST` | `/api/update-email` | Scholar updates a student's email → `campus_email` is synced in registry |
+| `DELETE` | `/api/affiliates/:campus_id` | Hard-delete an affiliate (admin use only) |
 
 ---
 
