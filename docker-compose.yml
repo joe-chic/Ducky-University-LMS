@@ -269,9 +269,11 @@ services:
       PGDATABASE: ducky_human_capital_db
       PGUSER: postgres
       PGPASSWORD: postgres
+      REGISTRY_URL: http://registry-microservice:3009
     depends_on:
       - db-human-capital
       - seed-human-capital
+      - registry-microservice
     ports: ["3005:3005"]
 
   human-capital-bff-service:

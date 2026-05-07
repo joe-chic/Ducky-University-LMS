@@ -254,6 +254,25 @@ const TABLES = {
   },
 };
 
+// ─── Client-side validation ─────────────────────────────────────────────────────
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const PHONE_RE = /^\+?[\d\s\-().]{7,20}$/;
+
+function validateForm(cfg, body) {
+  for (const f of cfg.fields) {
+    if (f.required && (body[f.name] === null || body[f.name] === undefined || String(body[f.name]).trim() === '')) {
+      return `El campo "${f.label}" es obligatorio.`;
+    }
+  }
+  if (cfg.endpoint === '/api/employees') {
+    if (body.employee_email && !EMAIL_RE.test(body.employee_email))
+      return 'El correo electrónico no tiene un formato válido (ej: nombre@dominio.com).';
+    if (body.employee_phone && !PHONE_RE.test(body.employee_phone))
+      return 'El teléfono no tiene un formato válido.';
+  }
+  return null;
+}
+
 function switchTable(name) {
   currentTable = name;
   currentPage  = 1;
@@ -361,26 +380,40 @@ async function submitForm(e) {
   const body = {};
   fd.forEach((v, k) => { body[k] = v === '' ? null : v; });
 
+  // ── Step 1: Client-side validation ──
+  const validationError = validateForm(cfg, body);
+  if (validationError) {
+    toast('⚠ ' + validationError, 'error');
+    return;
+  }
+
   const url    = editingId !== null ? `${BFF}${cfg.endpoint}/${editingId}` : `${BFF}${cfg.endpoint}`;
   const method = editingId !== null ? 'PUT' : 'POST';
+
+  // ── Step 2: Send to BFF ──
   try {
     const r = await fetch(url, { method, headers: {'Content-Type':'application/json'}, body: JSON.stringify(body) });
     const d = await r.json();
+    // ── Step 3: Display BFF success message or error ──
     if (!r.ok) throw new Error(d.error || 'Request failed');
     closeModal();
-    toast('✓ Record saved', 'success');
+    toast('✓ ' + (d.message || 'Operación completada con éxito.'), 'success');
     loadData();
   } catch(err) { toast('✗ ' + err.message, 'error'); }
 }
 
 async function deleteRecord(id) {
-  if (!confirm('Delete this record? This cannot be undone.')) return;
   const cfg = TABLES[currentTable];
+  const isEmployee = cfg.endpoint === '/api/employees';
+  const confirmMsg = isEmployee
+    ? '¿Desactivar este empleado? El registro se conserva en la base de datos.'
+    : '¿Eliminar este registro? Esta acción no se puede deshacer.';
+  if (!confirm(confirmMsg)) return;
   try {
     const r = await fetch(`${BFF}${cfg.endpoint}/${id}`, { method: 'DELETE' });
     const d = await r.json();
     if (!r.ok) throw new Error(d.error || 'Delete failed');
-    toast('✓ Record deleted', 'success');
+    toast('✓ ' + (d.message || (isEmployee ? 'Empleado desactivado.' : 'Registro eliminado.')), 'success');
     loadData();
   } catch(e) { toast('✗ ' + e.message, 'error'); }
 }
