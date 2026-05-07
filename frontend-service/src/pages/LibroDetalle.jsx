@@ -18,8 +18,6 @@ function LibroDetalle() {
   const hasManagementRole = isAdmin || isLib;
   // Only actual students/employees (non-management) can request loans online
   const isAlumno = !hasManagementRole;
-  // Only e-books and digital articles can be requested online
-  const isDigital = (libro) => libro && ["e_book", "digital_article"].includes(libro.tipo);
 
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [libro, setLibro] = useState(null);
