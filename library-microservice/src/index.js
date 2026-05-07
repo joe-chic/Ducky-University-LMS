@@ -174,8 +174,11 @@ app.get("/resources", async (req, res) => {
     const items = result.rows.map(resourceRowToDto);
     res.json({ items, total, page, pageSize });
   } catch (err) {
+    if (err.code === "23505") {
+      return res.status(400).json({ error: "Action not permitted: " + (err.detail || "Unique constraint violated.") });
+    }
     console.error(err);
-    res.status(500).json({ message: "Failed to fetch resources" });
+    res.status(500).json({ error: err.message });
   }
 });
 
@@ -223,8 +226,11 @@ app.get("/resources/:id", async (req, res) => {
     if (result.rows.length === 0) return res.status(404).json({ message: "Resource not found" });
     res.json(resourceRowToDto(result.rows[0]));
   } catch (err) {
+    if (err.code === "23505") {
+      return res.status(400).json({ error: "Action not permitted: " + (err.detail || "Unique constraint violated.") });
+    }
     console.error(err);
-    res.status(500).json({ message: "Failed to fetch resource" });
+    res.status(500).json({ error: err.message });
   }
 });
 
@@ -341,8 +347,11 @@ app.delete("/resources/:id", async (req, res) => {
     );
     res.json({ ok: true });
   } catch (err) {
+    if (err.code === "23505") {
+      return res.status(400).json({ error: "Action not permitted: " + (err.detail || "Unique constraint violated.") });
+    }
     console.error(err);
-    res.status(500).json({ message: "Failed to disable resource" });
+    res.status(500).json({ error: err.message });
   }
 });
 
@@ -459,8 +468,11 @@ app.get("/loans", async (req, res) => {
     );
     res.json(result.rows);
   } catch (err) {
+    if (err.code === "23505") {
+      return res.status(400).json({ error: "Action not permitted: " + (err.detail || "Unique constraint violated.") });
+    }
     console.error(err);
-    res.status(500).json({ message: "Failed to fetch loans" });
+    res.status(500).json({ error: err.message });
   }
 });
 

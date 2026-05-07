@@ -25,7 +25,7 @@ const paginate = async (res, countSql, dataSql, params, page) => {
       pool.query(dataSql, [...params, limit, offset]),
     ]);
     res.json({ items: dataRes.rows, total: parseInt(totalRes.rows[0].count), page, pages: Math.ceil(parseInt(totalRes.rows[0].count) / limit) });
-  } catch (e) { res.status(500).json({ error: e.message }); }
+  } catch (e) { if (e.code === "23505") { res.status(400).json({ error: "Action not permitted: " + (e.detail || "Unique constraint violated.") }); } else { res.status(500).json({ error: e.message }); } }
 };
 
 // ─── DEPARTMENTS ────────────────────────────────────────────────────────────
@@ -43,7 +43,7 @@ app.post('/api/departments', async (req, res) => {
       'INSERT INTO departments(department_name, department_head_id) VALUES($1,$2) RETURNING *',
       [department_name, department_head_id]);
     res.json(r.rows[0]);
-  } catch (e) { res.status(500).json({ error: e.message }); }
+  } catch (e) { if (e.code === "23505") { res.status(400).json({ error: "Action not permitted: " + (e.detail || "Unique constraint violated.") }); } else { res.status(500).json({ error: e.message }); } }
 });
 app.put('/api/departments/:id', async (req, res) => {
   const { department_name, department_head_id } = req.body;
@@ -52,7 +52,7 @@ app.put('/api/departments/:id', async (req, res) => {
       'UPDATE departments SET department_name=$1, department_head_id=$2 WHERE department_id=$3 RETURNING *',
       [department_name, department_head_id, req.params.id]);
     res.json(r.rows[0]);
-  } catch (e) { res.status(500).json({ error: e.message }); }
+  } catch (e) { if (e.code === "23505") { res.status(400).json({ error: "Action not permitted: " + (e.detail || "Unique constraint violated.") }); } else { res.status(500).json({ error: e.message }); } }
 });
 app.delete('/api/departments/:id', async (req, res) => {
   try { await pool.query('DELETE FROM departments WHERE department_id=$1', [req.params.id]); res.json({ ok: true }); }
@@ -75,7 +75,7 @@ app.post('/api/students', async (req, res) => {
        VALUES($1,$2,$3,$4,$5,$6,$7,NOW()) RETURNING *`,
       [student_status, student_email, student_phone, first_name, middle_name || null, father_lastname, mother_lastname || null]);
     res.json(r.rows[0]);
-  } catch (e) { res.status(500).json({ error: e.message }); }
+  } catch (e) { if (e.code === "23505") { res.status(400).json({ error: "Action not permitted: " + (e.detail || "Unique constraint violated.") }); } else { res.status(500).json({ error: e.message }); } }
 });
 app.put('/api/students/:id', async (req, res) => {
   const { student_status, student_email, student_phone, first_name, middle_name, father_lastname, mother_lastname } = req.body;
@@ -84,7 +84,7 @@ app.put('/api/students/:id', async (req, res) => {
       `UPDATE students SET student_status=$1,student_email=$2,student_phone=$3,first_name=$4,middle_name=$5,father_lastname=$6,mother_lastname=$7 WHERE student_id=$8 RETURNING *`,
       [student_status, student_email, student_phone, first_name, middle_name || null, father_lastname, mother_lastname || null, req.params.id]);
     res.json(r.rows[0]);
-  } catch (e) { res.status(500).json({ error: e.message }); }
+  } catch (e) { if (e.code === "23505") { res.status(400).json({ error: "Action not permitted: " + (e.detail || "Unique constraint violated.") }); } else { res.status(500).json({ error: e.message }); } }
 });
 app.delete('/api/students/:id', async (req, res) => {
   try { await pool.query('DELETE FROM students WHERE student_id=$1', [req.params.id]); res.json({ ok: true }); }
@@ -106,7 +106,7 @@ app.post('/api/subjects', async (req, res) => {
       'INSERT INTO subjects(department_id,subject_name,subject_description,status,credits,subject_is_elective) VALUES($1,$2,$3,$4,$5,$6) RETURNING *',
       [department_id, subject_name, subject_description, status, credits, subject_is_elective]);
     res.json(r.rows[0]);
-  } catch (e) { res.status(500).json({ error: e.message }); }
+  } catch (e) { if (e.code === "23505") { res.status(400).json({ error: "Action not permitted: " + (e.detail || "Unique constraint violated.") }); } else { res.status(500).json({ error: e.message }); } }
 });
 app.put('/api/subjects/:id', async (req, res) => {
   const { department_id, subject_name, subject_description, status, credits, subject_is_elective } = req.body;
@@ -115,7 +115,7 @@ app.put('/api/subjects/:id', async (req, res) => {
       'UPDATE subjects SET department_id=$1,subject_name=$2,subject_description=$3,status=$4,credits=$5,subject_is_elective=$6 WHERE subject_id=$7 RETURNING *',
       [department_id, subject_name, subject_description, status, credits, subject_is_elective, req.params.id]);
     res.json(r.rows[0]);
-  } catch (e) { res.status(500).json({ error: e.message }); }
+  } catch (e) { if (e.code === "23505") { res.status(400).json({ error: "Action not permitted: " + (e.detail || "Unique constraint violated.") }); } else { res.status(500).json({ error: e.message }); } }
 });
 app.delete('/api/subjects/:id', async (req, res) => {
   try { await pool.query('DELETE FROM subjects WHERE subject_id=$1', [req.params.id]); res.json({ ok: true }); }
@@ -137,7 +137,7 @@ app.post('/api/locations', async (req, res) => {
       'INSERT INTO classroom_locations(location_building_name,location_floor,location_room_number) VALUES($1,$2,$3) RETURNING *',
       [location_building_name, location_floor, location_room_number]);
     res.json(r.rows[0]);
-  } catch (e) { res.status(500).json({ error: e.message }); }
+  } catch (e) { if (e.code === "23505") { res.status(400).json({ error: "Action not permitted: " + (e.detail || "Unique constraint violated.") }); } else { res.status(500).json({ error: e.message }); } }
 });
 app.put('/api/locations/:id', async (req, res) => {
   const { location_building_name, location_floor, location_room_number } = req.body;
@@ -146,7 +146,7 @@ app.put('/api/locations/:id', async (req, res) => {
       'UPDATE classroom_locations SET location_building_name=$1,location_floor=$2,location_room_number=$3 WHERE location_id=$4 RETURNING *',
       [location_building_name, location_floor, location_room_number, req.params.id]);
     res.json(r.rows[0]);
-  } catch (e) { res.status(500).json({ error: e.message }); }
+  } catch (e) { if (e.code === "23505") { res.status(400).json({ error: "Action not permitted: " + (e.detail || "Unique constraint violated.") }); } else { res.status(500).json({ error: e.message }); } }
 });
 app.delete('/api/locations/:id', async (req, res) => {
   try { await pool.query('DELETE FROM classroom_locations WHERE location_id=$1', [req.params.id]); res.json({ ok: true }); }
@@ -173,7 +173,7 @@ app.post('/api/availabilities', async (req, res) => {
        VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,NOW()) RETURNING *`,
       [subject_id, location_id, professor_id, availability_status, attendance_mode, current_enrollment, class_start_at, class_end_at, subject_start_at, subject_end_at]);
     res.json(r.rows[0]);
-  } catch (e) { res.status(500).json({ error: e.message }); }
+  } catch (e) { if (e.code === "23505") { res.status(400).json({ error: "Action not permitted: " + (e.detail || "Unique constraint violated.") }); } else { res.status(500).json({ error: e.message }); } }
 });
 app.put('/api/availabilities/:id', async (req, res) => {
   const { subject_id, location_id, professor_id, availability_status, attendance_mode, current_enrollment, class_start_at, class_end_at, subject_start_at, subject_end_at } = req.body;
@@ -182,7 +182,7 @@ app.put('/api/availabilities/:id', async (req, res) => {
       `UPDATE subject_availabilities SET subject_id=$1,location_id=$2,professor_id=$3,availability_status=$4,attendance_mode=$5,current_enrollment=$6,class_start_at=$7,class_end_at=$8,subject_start_at=$9,subject_end_at=$10 WHERE availability_id=$11 RETURNING *`,
       [subject_id, location_id, professor_id, availability_status, attendance_mode, current_enrollment, class_start_at, class_end_at, subject_start_at, subject_end_at, req.params.id]);
     res.json(r.rows[0]);
-  } catch (e) { res.status(500).json({ error: e.message }); }
+  } catch (e) { if (e.code === "23505") { res.status(400).json({ error: "Action not permitted: " + (e.detail || "Unique constraint violated.") }); } else { res.status(500).json({ error: e.message }); } }
 });
 app.delete('/api/availabilities/:id', async (req, res) => {
   try { await pool.query('DELETE FROM subject_availabilities WHERE availability_id=$1', [req.params.id]); res.json({ ok: true }); }
@@ -209,7 +209,7 @@ app.post('/api/enrollments', async (req, res) => {
       'INSERT INTO students_availabilities(student_id,availability_id,enrollment_status,subject_final_score) VALUES($1,$2,$3,$4) RETURNING *',
       [student_id, availability_id, enrollment_status, subject_final_score || null]);
     res.json(r.rows[0]);
-  } catch (e) { res.status(500).json({ error: e.message }); }
+  } catch (e) { if (e.code === "23505") { res.status(400).json({ error: "Action not permitted: " + (e.detail || "Unique constraint violated.") }); } else { res.status(500).json({ error: e.message }); } }
 });
 app.put('/api/enrollments/:sid/:aid', async (req, res) => {
   const { enrollment_status, subject_final_score, partial_final_score, partial_second_score, partial_third_score } = req.body;
@@ -218,7 +218,7 @@ app.put('/api/enrollments/:sid/:aid', async (req, res) => {
       'UPDATE students_availabilities SET enrollment_status=$1,subject_final_score=$2,partial_final_score=$3,partial_second_score=$4,partial_third_score=$5 WHERE student_id=$6 AND availability_id=$7 RETURNING *',
       [enrollment_status, subject_final_score || null, partial_final_score || null, partial_second_score || null, partial_third_score || null, req.params.sid, req.params.aid]);
     res.json(r.rows[0]);
-  } catch (e) { res.status(500).json({ error: e.message }); }
+  } catch (e) { if (e.code === "23505") { res.status(400).json({ error: "Action not permitted: " + (e.detail || "Unique constraint violated.") }); } else { res.status(500).json({ error: e.message }); } }
 });
 app.delete('/api/enrollments/:sid/:aid', async (req, res) => {
   try { await pool.query('DELETE FROM students_availabilities WHERE student_id=$1 AND availability_id=$2', [req.params.sid, req.params.aid]); res.json({ ok: true }); }
