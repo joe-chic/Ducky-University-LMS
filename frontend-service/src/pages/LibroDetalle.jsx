@@ -148,8 +148,73 @@ function LibroDetalle() {
   const enPrestamo  = ejemplares.filter(e => e.example_op_state === "on loan").length;
 
   // Only digital resources (e-books and digital articles) can be requested online.
-  // Physical books must be borrowed in person through the librarian.
   const isDigital = libro => ["e_book", "digital_article"].includes(libro?.tipo);
+
+  // ── Digital metadata state & fetch ──────────────────────────────────────────
+  const [digitalMeta,   setDigitalMeta]   = useState(null);
+  const [digitalStatus, setDigitalStatus] = useState(null);
+  const [editingDM,     setEditingDM]     = useState(false);
+  const [dmForm,        setDmForm]        = useState({});
+  const [loadingDescarga, setLoadingDescarga] = useState(false);
+  const [activeLoanId,  setActiveLoanId]  = useState(null);
+
+  useEffect(() => {
+    if (!libro || !isDigital(libro)) return;
+    const token = getToken();
+    Promise.all([
+      bffGet(`/api/resources/${id}/digital-metadata`, { token }).catch(() => null),
+      bffGet(`/api/resources/${id}/digital-status`,   { token }).catch(() => null),
+      bffGet(`/api/digital-loans`, { token, params: { campus_id: campusId, resource_id: id, state: "active" } }).catch(() => null),
+    ]).then(([meta, status, loans]) => {
+      setDigitalMeta(meta);
+      setDigitalStatus(status);
+      if (loans?.items?.length) setActiveLoanId(loans.items[0].digital_loan_id);
+      if (meta) setDmForm({ ...meta });
+    });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [libro, id, campusId]);
+
+  const handleDescarga = async () => {
+    if (!campusId) { setMsg({ type: "error", text: "No se encontró tu ID de campus. Vuelve a iniciar sesión." }); return; }
+    setLoadingDescarga(true); setMsg(null);
+    try {
+      const token = getToken();
+      const res = await bffPost("/api/digital-loans", { resource_id: Number(id), campus_id: campusId }, { token });
+      setActiveLoanId(res.digital_loan_id);
+      // Refresh status
+      const status = await bffGet(`/api/resources/${id}/digital-status`, { token }).catch(() => null);
+      setDigitalStatus(status);
+      // Open the resource
+      if (digitalMeta?.digital_url_link) window.open(digitalMeta.digital_url_link, "_blank", "noopener,noreferrer");
+      setMsg({ type: "success", text: res.reused ? "📖 Ya tienes acceso activo — abriendo recurso." : "✓ Acceso registrado. Abriendo recurso digital." });
+    } catch (err) {
+      setMsg({ type: "error", text: err.message || "Error al acceder al recurso." });
+    } finally { setLoadingDescarga(false); }
+  };
+
+  const handleDevolverDigital = async () => {
+    if (!activeLoanId) return;
+    if (!window.confirm("¿Liberar tu acceso a este recurso digital?")) return;
+    try {
+      const token = getToken();
+      await bffPut(`/api/digital-loans/${activeLoanId}/return`, {}, { token });
+      setActiveLoanId(null);
+      const status = await bffGet(`/api/resources/${id}/digital-status`, { token }).catch(() => null);
+      setDigitalStatus(status);
+      setMsg({ type: "success", text: "Acceso liberado correctamente." });
+    } catch (err) { setMsg({ type: "error", text: err.message }); }
+  };
+
+  const handleSaveDM = async (e) => {
+    e.preventDefault();
+    try {
+      const token = getToken();
+      const updated = await bffPut(`/api/resources/${id}/digital-metadata`, dmForm, { token });
+      setDigitalMeta(updated);
+      setEditingDM(false);
+      setMsg({ type: "success", text: "Metadatos digitales actualizados." });
+    } catch (err) { setMsg({ type: "error", text: err.message }); }
+  };
 
   return (
     <div className="home-container">
@@ -247,67 +312,145 @@ function LibroDetalle() {
 
               <hr className="libro-divider" />
 
-              <div className="libro-ubicacion">
-                <h3>Ejemplares Físicos</h3>
-                {ejemplares.length === 0 ? (
-                  <p style={{ color: "#999" }}>No hay ejemplares físicos registrados para este recurso.</p>
-                ) : (
-                  <div style={{ overflowX: "auto" }}>
-                    <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "0.87rem" }}>
-                      <thead>
-                        <tr style={{ background: "#f5f5f5", borderBottom: "2px solid #e0e0e0" }}>
-                          <th style={{ padding: "8px 12px", textAlign: "left", fontWeight: 600, color: "#555" }}>Código de Barras</th>
-                          <th style={{ padding: "8px 12px", textAlign: "left", fontWeight: 600, color: "#555" }}>Ubicación</th>
-                          <th style={{ padding: "8px 12px", textAlign: "left", fontWeight: 600, color: "#555" }}>Estado Físico</th>
-                          <th style={{ padding: "8px 12px", textAlign: "left", fontWeight: 600, color: "#555" }}>Disponibilidad</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {ejemplares.map((ej, i) => {
-                          const opState = ej.example_op_state;
-                          const available = opState === "available";
-                          const badgeColor = available ? "#2E8B57" : opState === "on loan" ? "#b71c1c" : "#795548";
-                          const badgeLabel = opState === "available" ? "Disponible"
-                            : opState === "on loan" ? "En Préstamo"
-                            : opState === "reserved" ? "Reservado"
-                            : opState === "internal consultation only" ? "Consulta Interna"
-                            : opState === "in transit" ? "En Tránsito"
-                            : opState;
-                          return (
-                            <tr key={ej.barcode || i} style={{ borderBottom: "1px solid #eee" }}>
-                              <td style={{ padding: "8px 12px", fontFamily: "monospace", fontSize: "0.85rem", color: "#333" }}>{ej.barcode}</td>
-                              <td style={{ padding: "8px 12px", color: "#555" }}>{ej.example_location_code}</td>
-                              <td style={{ padding: "8px 12px", textTransform: "capitalize", color: "#666" }}>{ej.example_health_state}</td>
-                              <td style={{ padding: "8px 12px" }}>
-                                <span style={{ background: badgeColor, color: "#fff", borderRadius: "12px", padding: "3px 10px", fontSize: "0.78rem", fontWeight: 600, whiteSpace: "nowrap" }}>
-                                  {badgeLabel}
-                                </span>
-                              </td>
-                            </tr>
-                          );
-                        })}
-                      </tbody>
-                    </table>
-                  </div>
-                )}
-              </div>
+              {/* ── PHYSICAL EXAMPLES (physical resources only) ── */}
+              {!isDigital(libro) && (
+                <div className="libro-ubicacion">
+                  <h3>Ejemplares Físicos</h3>
+                  {ejemplares.length === 0 ? (
+                    <p style={{ color: "#999" }}>No hay ejemplares físicos registrados para este recurso.</p>
+                  ) : (
+                    <div style={{ overflowX: "auto" }}>
+                      <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "0.87rem" }}>
+                        <thead>
+                          <tr style={{ background: "#f5f5f5", borderBottom: "2px solid #e0e0e0" }}>
+                            <th style={{ padding: "8px 12px", textAlign: "left", fontWeight: 600, color: "#555" }}>Código de Barras</th>
+                            <th style={{ padding: "8px 12px", textAlign: "left", fontWeight: 600, color: "#555" }}>Ubicación</th>
+                            <th style={{ padding: "8px 12px", textAlign: "left", fontWeight: 600, color: "#555" }}>Estado Físico</th>
+                            <th style={{ padding: "8px 12px", textAlign: "left", fontWeight: 600, color: "#555" }}>Disponibilidad</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {ejemplares.map((ej, i) => {
+                            const opState = ej.example_op_state;
+                            const badgeColor = opState === "available" ? "#2E8B57" : opState === "on loan" ? "#b71c1c" : "#795548";
+                            const badgeLabel = opState === "available" ? "Disponible" : opState === "on loan" ? "En Préstamo" : opState === "reserved" ? "Reservado" : opState === "internal consultation only" ? "Consulta Interna" : "En Tránsito";
+                            return (
+                              <tr key={ej.barcode || i} style={{ borderBottom: "1px solid #eee" }}>
+                                <td style={{ padding: "8px 12px", fontFamily: "monospace", fontSize: "0.85rem", color: "#333" }}>{ej.barcode}</td>
+                                <td style={{ padding: "8px 12px", color: "#555" }}>{ej.example_location_code}</td>
+                                <td style={{ padding: "8px 12px", textTransform: "capitalize", color: "#666" }}>{ej.example_health_state}</td>
+                                <td style={{ padding: "8px 12px" }}>
+                                  <span style={{ background: badgeColor, color: "#fff", borderRadius: "12px", padding: "3px 10px", fontSize: "0.78rem", fontWeight: 600 }}>{badgeLabel}</span>
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* ── DIGITAL METADATA PANEL (digital resources only) ── */}
+              {isDigital(libro) && (
+                <div className="libro-ubicacion">
+                  <h3>Acceso Digital</h3>
+                  {digitalMeta ? (
+                    <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(170px,1fr))", gap: "10px", marginBottom: "14px" }}>
+                      {[["📄 Formato",    digitalMeta.digital_file_format?.toUpperCase()],
+                        ["💾 Tamaño",      `${(digitalMeta.digital_file_size / 1024).toFixed(1)} MB`],
+                        ["📃 Licencia",   digitalMeta.digital_license_model],
+                        ["👥 Concurrentes", `${digitalStatus?.active_concurrent ?? "—"} / ${digitalMeta.digital_max_concurrent_users ?? "∞"}`],
+                        ["🔄 Renovaciones", `Máx. ${digitalStatus?.max_renewals ?? 3}`],
+                      ].map(([label, val]) => (
+                        <div key={label} style={{ background: "#f8f9fa", borderRadius: "8px", padding: "10px 12px", border: "1px solid #e0e0e0" }}>
+                          <div style={{ fontSize: "0.72rem", color: "#888", marginBottom: "2px" }}>{label}</div>
+                          <div style={{ fontWeight: 600, fontSize: "0.9rem", textTransform: "capitalize" }}>{val}</div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : <p style={{ color: "#aaa" }}>Cargando metadatos…</p>}
+
+                  {/* Admin/Lib: digital metadata editor */}
+                  {hasManagementRole && (
+                    <div style={{ marginTop: "12px" }}>
+                      <button className="libro-btn-editar" onClick={() => setEditingDM(v => !v)} style={{ marginBottom: "8px" }}>
+                        {editingDM ? "Cancelar edición" : "✏️ Editar Metadatos Digitales"}
+                      </button>
+                      {editingDM && (
+                        <form onSubmit={handleSaveDM} style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px", background: "#f0f4ff", borderRadius: "10px", padding: "16px" }}>
+                          <label style={{ gridColumn: "1/-1", fontWeight: 600, fontSize: "0.85rem" }}>URL de Descarga
+                            <input style={{ display:"block", width:"100%", marginTop:"4px", padding:"6px 8px", borderRadius:"5px", border:"1px solid #ccc", fontSize:"0.85rem" }}
+                              value={dmForm.digital_url_link || ""} onChange={e => setDmForm(f => ({ ...f, digital_url_link: e.target.value }))} />
+                          </label>
+                          <label style={{ fontWeight: 600, fontSize: "0.85rem" }}>Formato
+                            <select style={{ display:"block", width:"100%", marginTop:"4px", padding:"6px 8px", borderRadius:"5px", border:"1px solid #ccc" }}
+                              value={dmForm.digital_file_format || ""} onChange={e => setDmForm(f => ({ ...f, digital_file_format: e.target.value }))}>
+                              {["pdf","epub","daisy"].map(v => <option key={v} value={v}>{v.toUpperCase()}</option>)}
+                            </select>
+                          </label>
+                          <label style={{ fontWeight: 600, fontSize: "0.85rem" }}>Tamaño (KB)
+                            <input type="number" style={{ display:"block", width:"100%", marginTop:"4px", padding:"6px 8px", borderRadius:"5px", border:"1px solid #ccc" }}
+                              value={dmForm.digital_file_size || ""} onChange={e => setDmForm(f => ({ ...f, digital_file_size: Number(e.target.value) }))} />
+                          </label>
+                          <label style={{ fontWeight: 600, fontSize: "0.85rem" }}>Modelo de Licencia
+                            <select style={{ display:"block", width:"100%", marginTop:"4px", padding:"6px 8px", borderRadius:"5px", border:"1px solid #ccc" }}
+                              value={dmForm.digital_license_model || ""} onChange={e => setDmForm(f => ({ ...f, digital_license_model: e.target.value }))}>
+                              {["concurrent","unlimited","metered","oc-ou"].map(v => <option key={v} value={v}>{v}</option>)}
+                            </select>
+                          </label>
+                          <label style={{ fontWeight: 600, fontSize: "0.85rem" }}>Máx. Usuarios Concurrentes
+                            <input type="number" style={{ display:"block", width:"100%", marginTop:"4px", padding:"6px 8px", borderRadius:"5px", border:"1px solid #ccc" }}
+                              value={dmForm.digital_max_concurrent_users || ""} onChange={e => setDmForm(f => ({ ...f, digital_max_concurrent_users: Number(e.target.value) }))} />
+                          </label>
+                          <label style={{ fontWeight: 600, fontSize: "0.85rem" }}>Máx. Usuarios Totales
+                            <input type="number" style={{ display:"block", width:"100%", marginTop:"4px", padding:"6px 8px", borderRadius:"5px", border:"1px solid #ccc" }}
+                              value={dmForm.digital_total_users_allows || ""} onChange={e => setDmForm(f => ({ ...f, digital_total_users_allows: Number(e.target.value) }))} />
+                          </label>
+                          <div style={{ gridColumn: "1/-1" }}>
+                            <button type="submit" className="libro-btn-prestamo" style={{ marginRight:"8px" }}>Guardar Cambios</button>
+                          </div>
+                        </form>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
 
               <hr className="libro-divider" />
 
+              {/* ── ACTIONS ── */}
               <div className="libro-acciones">
-                {isAlumno && isDigital(libro) && libro.disponible && (
-                  <button className="libro-btn-prestamo" onClick={handleSolicitarPrestamo} disabled={loadingPrestamo}>
-                    {loadingPrestamo ? "Procesando..." : "Solicitar Préstamo"}
-                  </button>
+
+                {/* Digital: download button for students */}
+                {isAlumno && isDigital(libro) && (
+                  <>
+                    {digitalStatus?.can_access ? (
+                      <button className="libro-btn-prestamo" onClick={handleDescarga} disabled={loadingDescarga}>
+                        {loadingDescarga ? "Procesando…" : "📥 Descargar Recurso"}
+                      </button>
+                    ) : (
+                      <p style={{ color: "#c62828", fontWeight: 600, background: "#fff3f3", border: "1px solid #ffcdd2", borderRadius: "8px", padding: "10px 14px" }}>
+                        🚫 Recurso no disponible: se alcanzó el límite de {digitalMeta?.digital_max_concurrent_users} usuarios concurrentes. Intenta más tarde.
+                      </p>
+                    )}
+                    {activeLoanId && (
+                      <button onClick={handleDevolverDigital} style={{ marginLeft:"8px", background:"transparent", border:"1px solid #888", borderRadius:"6px", padding:"6px 12px", cursor:"pointer", fontSize:"0.85rem", color:"#555" }}>
+                        Liberar Acceso
+                      </button>
+                    )}
+                  </>
                 )}
-                {isAlumno && isDigital(libro) && !libro.disponible && (
-                  <p style={{ color: "#c62828", fontWeight: 600 }}>No disponible para préstamo en este momento.</p>
-                )}
+
+                {/* Physical: in-person message for students */}
                 {isAlumno && !isDigital(libro) && (
                   <p style={{ color: "#795548", fontWeight: 500, fontSize: "0.9rem", background: "#fff8e1", border: "1px solid #ffe082", borderRadius: "6px", padding: "10px 14px" }}>
                     📚 Para solicitar este recurso físico, preséntate en persona en la biblioteca. El personal registrará el préstamo.
                   </p>
                 )}
+
+                {/* Management: edit / toggle */}
                 {hasManagementRole && (
                   <>
                     <button className="libro-btn-editar" onClick={() => { setRecursoEditando({ ...libro }); setModalEditarAbierto(true); }}>

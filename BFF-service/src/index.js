@@ -312,6 +312,74 @@ app.put("/api/fines/:id", (req, res) => proxyTreasury(req, res, `/fines/${req.pa
 app.post("/api/fines/:id/pay", (req, res) => proxyTreasury(req, res, `/fines/${req.params.id}/pay`, "POST"));
 app.get("/api/daily-fine", (req, res) => proxyTreasury(req, res, "/daily-fine", "GET"));
 
+// ── Digital resource endpoints ────────────────────────────────────────────────
+app.get("/api/resources/:id/digital-metadata", async (req, res) => {
+  try {
+    const r = await axios.get(`${LIBRARY_BASE_URL}/resources/${req.params.id}/digital-metadata`, { timeout: 8000 });
+    res.json(r.data);
+  } catch (err) {
+    res.status(err?.response?.status || 500).json({ message: err?.response?.data?.message || "Error al obtener metadatos digitales" });
+  }
+});
+
+app.put("/api/resources/:id/digital-metadata", async (req, res) => {
+  try {
+    const r = await axios.put(`${LIBRARY_BASE_URL}/resources/${req.params.id}/digital-metadata`, req.body, {
+      headers: { "Content-Type": "application/json" }, timeout: 8000,
+    });
+    res.json(r.data);
+  } catch (err) {
+    res.status(err?.response?.status || 500).json({ message: err?.response?.data?.message || "Error al actualizar metadatos digitales" });
+  }
+});
+
+app.get("/api/resources/:id/digital-status", async (req, res) => {
+  try {
+    const r = await axios.get(`${LIBRARY_BASE_URL}/resources/${req.params.id}/digital-status`, { timeout: 8000 });
+    res.json(r.data);
+  } catch (err) {
+    res.status(err?.response?.status || 500).json({ message: err?.response?.data?.message || "Error al obtener estado digital" });
+  }
+});
+
+app.get("/api/digital-loans", async (req, res) => {
+  try {
+    const r = await axios.get(`${LIBRARY_BASE_URL}/digital-loans`, { params: req.query, timeout: 8000 });
+    res.json(r.data);
+  } catch (err) {
+    res.status(err?.response?.status || 500).json({ message: err?.response?.data?.message || "Error al obtener préstamos digitales" });
+  }
+});
+
+app.post("/api/digital-loans", async (req, res) => {
+  try {
+    const r = await axios.post(`${LIBRARY_BASE_URL}/digital-loans`, req.body, {
+      headers: { "Content-Type": "application/json" }, timeout: 8000,
+    });
+    res.status(r.status).json(r.data);
+  } catch (err) {
+    res.status(err?.response?.status || 500).json({ message: err?.response?.data?.message || "Error al registrar acceso digital" });
+  }
+});
+
+app.put("/api/digital-loans/:id/return", async (req, res) => {
+  try {
+    const r = await axios.put(`${LIBRARY_BASE_URL}/digital-loans/${req.params.id}/return`, {}, { timeout: 8000 });
+    res.json(r.data);
+  } catch (err) {
+    res.status(err?.response?.status || 500).json({ message: err?.response?.data?.message || "Error al devolver acceso digital" });
+  }
+});
+
+app.put("/api/digital-loans/:id/renew", async (req, res) => {
+  try {
+    const r = await axios.put(`${LIBRARY_BASE_URL}/digital-loans/${req.params.id}/renew`, {}, { timeout: 8000 });
+    res.json(r.data);
+  } catch (err) {
+    res.status(err?.response?.status || 500).json({ message: err?.response?.data?.message || "Error al renovar acceso digital" });
+  }
+});
+
 app.listen(PORT, () => {
   // eslint-disable-next-line no-console
   console.log(`BFF listening on :${PORT}`);

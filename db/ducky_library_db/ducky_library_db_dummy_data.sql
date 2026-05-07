@@ -388,6 +388,47 @@ INSERT INTO supplementary_languages(language_id, resource_id) VALUES
 ON CONFLICT DO NOTHING;
 
 -- ============================================================================
+-- DIGITAL RESOURCES (E-BOOKS AND DIGITAL ARTICLES)
+-- ============================================================================
+
+INSERT INTO collaborators(colaborator_id, first_name, middle_name, father_lastname, mother_lastname, nationality_id) VALUES
+  (3031, 'Andrew',  NULL, 'Ng',       NULL, 1),
+  (3032, 'Robert',  'C.','Martin',    NULL, 1),
+  (3033, 'Daniel',  NULL, 'Kahneman', NULL, 1)
+ON CONFLICT DO NOTHING;
+
+INSERT INTO resources(resource_id, resource_title, author_principal_id, publisher_id, resource_publication_year, resource_type, resource_cost, resource_state, vendor_id, created_at, created_by, latest_modified_at, latest_modified_by, disabled_at, disabled_by) VALUES
+  (5033, 'Deep Learning Fundamentals',               3031, 3, 2023, 'e_book',         29.99, 'available', 1, NOW(), 1, NOW(), 1, NULL, NULL),
+  (5034, 'Clean Code: Agile Software Craftsmanship', 3032, 4, 2020, 'e_book',         24.99, 'available', 1, NOW(), 1, NOW(), 1, NULL, NULL),
+  (5035, 'Thinking, Fast and Slow',                  3033, 5, 2018, 'e_book',         19.99, 'available', 1, NOW(), 1, NOW(), 1, NULL, NULL),
+  (5036, 'The Impact of AI on Modern Healthcare',    NULL, 2, 2024, 'digital_article',  9.99, 'available', 1, NOW(), 1, NOW(), 1, NULL, NULL),
+  (5037, 'Climate Change Mitigation Strategies',     NULL, 3, 2023, 'digital_article',  7.99, 'available', 1, NOW(), 1, NOW(), 1, NULL, NULL),
+  (5038, 'Quantum Computing: State and Prospects',   NULL, 4, 2024, 'digital_article',  8.99, 'available', 1, NOW(), 1, NOW(), 1, NULL, NULL)
+ON CONFLICT DO NOTHING;
+
+-- All digital resources use concurrent model, max 2 concurrent users, max 3 renewals enforced in app logic
+INSERT INTO digital_metadata(resource_id, digital_file_format, digital_file_size, digital_url_link, digital_license_model, digital_max_concurrent_users, digital_total_users_allows) VALUES
+  (5033, 'pdf',  2800, 'https://www.deeplearningbook.org/',                              'concurrent', 2, NULL),
+  (5034, 'epub', 1200, 'https://www.oreilly.com/library/view/clean-code-a/9780136083238/', 'concurrent', 2, NULL),
+  (5035, 'epub', 1800, 'https://us.macmillan.com/books/9780374533557/',                  'concurrent', 2, NULL),
+  (5036, 'pdf',   450, 'https://www.nejm.org/doi/full/10.1056/NEJMra2304392',             'concurrent', 2, NULL),
+  (5037, 'pdf',   380, 'https://www.ipcc.ch/report/ar6/wg3/',                             'concurrent', 2, NULL),
+  (5038, 'pdf',   520, 'https://arxiv.org/abs/2301.10569',                                'concurrent', 2, NULL)
+ON CONFLICT DO NOTHING;
+
+-- Switch existing digital_article 5002 to concurrent model
+UPDATE digital_metadata SET digital_license_model = 'concurrent', digital_max_concurrent_users = 2 WHERE resource_id = 5002;
+
+INSERT INTO categories_resources(category_id, resource_id) VALUES
+  (14,5033),(2,5033), (14,5034),(2,5034), (7,5035),(2,5035),
+  (14,5036),(2,5036), (2,5037),(8,5037),  (14,5038),(2,5038)
+ON CONFLICT DO NOTHING;
+
+INSERT INTO supplementary_languages(language_id, resource_id) VALUES
+  (2,5033),(2,5034),(2,5035),(2,5036),(2,5037),(2,5038)
+ON CONFLICT DO NOTHING;
+
+-- ============================================================================
 -- FIX SEQUENCES
 -- ============================================================================
 

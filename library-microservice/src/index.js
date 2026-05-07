@@ -642,3 +642,182 @@ app.put("/loans/:id/return", async (req, res) => {
     client.release();
   }
 });
+
+// ─────────────────────────────────────────────────────────────────────────────
+// DIGITAL RESOURCES
+// ─────────────────────────────────────────────────────────────────────────────
+const DIGITAL_MAX_RENEWALS = 3;
+
+// GET /resources/:id/digital-metadata
+app.get("/resources/:id/digital-metadata", async (req, res) => {
+  try {
+    const id = Number(req.params.id);
+    const r = await query(
+      `SELECT dm.*, r.resource_type, r.resource_title
+       FROM digital_metadata dm
+       JOIN resources r ON r.resource_id = dm.resource_id
+       WHERE dm.resource_id = $1`, [id]
+    );
+    if (!r.rows.length) return res.status(404).json({ message: "Metadatos digitales no encontrados" });
+    res.json(r.rows[0]);
+  } catch (err) { console.error(err); res.status(500).json({ error: err.message }); }
+});
+
+// PUT /resources/:id/digital-metadata  (admin/librarian)
+app.put("/resources/:id/digital-metadata", async (req, res) => {
+  try {
+    const id = Number(req.params.id);
+    const { digital_file_format, digital_file_size, digital_url_link,
+            digital_license_model, digital_max_concurrent_users, digital_total_users_allows } = req.body;
+    const r = await query(
+      `UPDATE digital_metadata
+       SET digital_file_format = COALESCE($1, digital_file_format),
+           digital_file_size   = COALESCE($2, digital_file_size),
+           digital_url_link    = COALESCE($3, digital_url_link),
+           digital_license_model            = COALESCE($4, digital_license_model),
+           digital_max_concurrent_users     = COALESCE($5, digital_max_concurrent_users),
+           digital_total_users_allows       = COALESCE($6, digital_total_users_allows)
+       WHERE resource_id = $7
+       RETURNING *`,
+      [digital_file_format, digital_file_size, digital_url_link,
+       digital_license_model, digital_max_concurrent_users, digital_total_users_allows, id]
+    );
+    if (!r.rows.length) return res.status(404).json({ message: "Metadatos digitales no encontrados" });
+    res.json(r.rows[0]);
+  } catch (err) { console.error(err); res.status(500).json({ error: err.message }); }
+});
+
+// GET /resources/:id/digital-status  — concurrent slot availability
+app.get("/resources/:id/digital-status", async (req, res) => {
+  try {
+    const id = Number(req.params.id);
+    const metaRes = await query(
+      `SELECT digital_license_model, digital_max_concurrent_users FROM digital_metadata WHERE resource_id = $1`, [id]
+    );
+    if (!metaRes.rows.length) return res.status(404).json({ message: "Recurso no encontrado" });
+    const { digital_license_model, digital_max_concurrent_users } = metaRes.rows[0];
+
+    const activeRes = await query(
+      `SELECT COUNT(*)::int AS active_concurrent
+       FROM digital_loans WHERE resource_id = $1 AND digital_loan_state = 'active'`, [id]
+    );
+    const active = activeRes.rows[0].active_concurrent;
+    const max    = digital_max_concurrent_users;
+    res.json({
+      license_model:      digital_license_model,
+      active_concurrent:  active,
+      max_concurrent:     max,
+      max_renewals:       DIGITAL_MAX_RENEWALS,
+      can_access:         digital_license_model !== 'concurrent' || max == null || active < max,
+    });
+  } catch (err) { console.error(err); res.status(500).json({ error: err.message }); }
+});
+
+// GET /digital-loans?campus_id=&resource_id=&state=
+app.get("/digital-loans", async (req, res) => {
+  try {
+    const { campus_id, resource_id, state } = req.query;
+    const params = []; const where = [];
+    if (campus_id)   { params.push(Number(campus_id));   where.push(`dl.campus_id = $${params.length}`); }
+    if (resource_id) { params.push(Number(resource_id)); where.push(`dl.resource_id = $${params.length}`); }
+    if (state)       { params.push(state);               where.push(`dl.digital_loan_state = $${params.length}`); }
+    const whereSql = where.length ? `WHERE ${where.join(" AND ")}` : "";
+
+    const r = await query(
+      `SELECT dl.digital_loan_id, dl.resource_id, dl.campus_id, dl.initial_lent_at,
+              dl.digital_loan_state,
+              r.resource_title AS titulo, r.resource_type AS tipo,
+              (SELECT COUNT(*) FROM digital_loan_renewals dlr WHERE dlr.digital_loan_id = dl.digital_loan_id)::int AS renewal_count
+       FROM digital_loans dl
+       JOIN resources r ON r.resource_id = dl.resource_id
+       ${whereSql}
+       ORDER BY dl.initial_lent_at DESC`, params
+    );
+    res.json({ items: r.rows });
+  } catch (err) { console.error(err); res.status(500).json({ error: err.message }); }
+});
+
+// POST /digital-loans — crear acceso digital (verifica slots concurrentes)
+app.post("/digital-loans", async (req, res) => {
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    const { resource_id, campus_id } = req.body;
+    if (!resource_id || !campus_id) return res.status(400).json({ message: "resource_id y campus_id son requeridos" });
+
+    // Check if user already has an active loan for this resource
+    const existing = await client.query(
+      `SELECT digital_loan_id FROM digital_loans WHERE resource_id=$1 AND campus_id=$2 AND digital_loan_state='active'`,
+      [resource_id, campus_id]
+    );
+    if (existing.rows.length) {
+      await client.query("COMMIT");
+      return res.status(200).json({ digital_loan_id: existing.rows[0].digital_loan_id, reused: true });
+    }
+
+    // Check concurrent limit
+    const meta = await client.query(
+      `SELECT digital_license_model, digital_max_concurrent_users FROM digital_metadata WHERE resource_id=$1`, [resource_id]
+    );
+    if (!meta.rows.length) return res.status(404).json({ message: "Metadatos digitales no encontrados" });
+    const { digital_license_model, digital_max_concurrent_users } = meta.rows[0];
+
+    if (digital_license_model === 'concurrent' && digital_max_concurrent_users != null) {
+      const active = await client.query(
+        `SELECT COUNT(*)::int AS cnt FROM digital_loans WHERE resource_id=$1 AND digital_loan_state='active'`, [resource_id]
+      );
+      if (active.rows[0].cnt >= digital_max_concurrent_users) {
+        await client.query("ROLLBACK");
+        return res.status(409).json({ message: `Límite de usuarios concurrentes alcanzado (${digital_max_concurrent_users}/${digital_max_concurrent_users}). Intenta más tarde.` });
+      }
+    }
+
+    const now = new Date();
+    const r = await client.query(
+      `INSERT INTO digital_loans(resource_id, campus_id, initial_lent_at, digital_loan_state, created_at, created_by, latest_modified_at, latest_modified_by)
+       VALUES($1,$2,$3,'active',$3,$2,$3,$2) RETURNING digital_loan_id`,
+      [resource_id, campus_id, now]
+    );
+    await client.query("COMMIT");
+    res.status(201).json({ digital_loan_id: r.rows[0].digital_loan_id, reused: false });
+  } catch (err) {
+    await client.query("ROLLBACK");
+    console.error(err);
+    res.status(500).json({ error: err.message });
+  } finally { client.release(); }
+});
+
+// PUT /digital-loans/:id/return
+app.put("/digital-loans/:id/return", async (req, res) => {
+  try {
+    const id = Number(req.params.id);
+    const r = await query(
+      `UPDATE digital_loans SET digital_loan_state='completed', latest_modified_at=NOW()
+       WHERE digital_loan_id=$1 AND digital_loan_state='active' RETURNING *`, [id]
+    );
+    if (!r.rows.length) return res.status(404).json({ message: "Préstamo digital activo no encontrado" });
+    res.json({ ok: true, loan: r.rows[0] });
+  } catch (err) { console.error(err); res.status(500).json({ error: err.message }); }
+});
+
+// PUT /digital-loans/:id/renew
+app.put("/digital-loans/:id/renew", async (req, res) => {
+  try {
+    const id = Number(req.params.id);
+    const loan = await query(
+      `SELECT * FROM digital_loans WHERE digital_loan_id=$1 AND digital_loan_state='active'`, [id]
+    );
+    if (!loan.rows.length) return res.status(404).json({ message: "Préstamo digital activo no encontrado" });
+
+    const renewals = await query(
+      `SELECT COUNT(*)::int AS cnt FROM digital_loan_renewals WHERE digital_loan_id=$1`, [id]
+    );
+    if (renewals.rows[0].cnt >= DIGITAL_MAX_RENEWALS) {
+      return res.status(409).json({ message: `Límite de renovaciones alcanzado (${DIGITAL_MAX_RENEWALS} máx.)` });
+    }
+    const r = await query(
+      `INSERT INTO digital_loan_renewals(digital_loan_id, renewal_lent_at) VALUES($1, NOW()) RETURNING *`, [id]
+    );
+    res.json({ ok: true, renewal: r.rows[0], renewals_used: renewals.rows[0].cnt + 1, max_renewals: DIGITAL_MAX_RENEWALS });
+  } catch (err) { console.error(err); res.status(500).json({ error: err.message }); }
+});
