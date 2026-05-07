@@ -147,7 +147,7 @@
         <h2 id="panel-title">Students</h2>
         <div class="meta" id="panel-meta">Loading…</div>
       </div>
-      <button class="btn btn-primary" onclick="openAdd()">＋ Add Record</button>
+      <button class="btn btn-primary" id="add-btn" onclick="openAdd()">＋ Add Record</button>
     </div>
 
     <div class="table-wrap">
@@ -272,6 +272,27 @@ const TABLES = {
   },
 };
 
+// ─── Client-side validation ──────────────────────────────────────────────────
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const PHONE_RE = /^\+?[\d\s\-().]{7,20}$/;
+
+function validateForm(cfg, body) {
+  // Check required fields
+  for (const f of cfg.fields) {
+    if (f.required && (body[f.name] === null || body[f.name] === undefined || String(body[f.name]).trim() === '')) {
+      return `El campo "${f.label}" es obligatorio.`;
+    }
+  }
+  // Format checks for students
+  if (cfg.endpoint === '/api/students') {
+    if (body.student_email && !EMAIL_RE.test(body.student_email))
+      return 'El correo electrónico no tiene un formato válido (ej: nombre@dominio.com).';
+    if (body.student_phone && !PHONE_RE.test(body.student_phone))
+      return 'El teléfono no tiene un formato válido.';
+  }
+  return null; // null = valid
+}
+
 // ─── Core logic ──────────────────────────────────────────────────────────────
 function switchTable(name) {
   currentTable = name;
@@ -395,6 +416,13 @@ async function submitForm(e) {
   if ('current_enrollment' in body) body.current_enrollment = body.current_enrollment === 'true';
   if ('subject_is_elective' in body) body.subject_is_elective = body.subject_is_elective === 'true';
 
+  // ── Step 1: Client-side validation ──
+  const validationError = validateForm(cfg, body);
+  if (validationError) {
+    toast('⚠ ' + validationError, 'error');
+    return;
+  }
+
   let url, method;
   if (editingId !== null) {
     url = `${BFF}${cfg.endpoint}/${editingId}${editingId2 ? '/'+editingId2 : ''}`;
@@ -403,14 +431,18 @@ async function submitForm(e) {
     url = `${BFF}${cfg.endpoint}`;
     method = 'POST';
   }
+
+  // ── Step 2: Send to BFF ──
   try {
     const r = await fetch(url, { method, headers: {'Content-Type':'application/json'}, body: JSON.stringify(body) });
     const d = await r.json();
+    // ── Step 3: Handle BFF/microservice error or success message ──
     if (!r.ok) throw new Error(d.error || 'Request failed');
     closeModal();
-    toast('Record saved successfully', 'success');
+    // Display the success message returned by the BFF
+    toast('✓ ' + (d.message || 'Operación completada con éxito.'), 'success');
     loadData();
-  } catch(err) { toast(err.message, 'error'); }
+  } catch(err) { toast('✗ ' + err.message, 'error'); }
 }
 
 async function deleteRecord(id, id2) {
