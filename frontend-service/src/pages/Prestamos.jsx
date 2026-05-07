@@ -185,7 +185,7 @@ function Prestamos() {
 
   function formatDate(d) {
     if (!d) return "—";
-    return new Date(d).toLocaleDateString("es-MX", { day: "2-digit", month: "short", year: "numeric" });
+    return new Date(d).toLocaleString("es-MX", { day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" });
   }
 
   function fineStatusLabel(s) {
@@ -204,7 +204,7 @@ function Prestamos() {
   const isActive = l => l.state === "active" || l.state === "overdue";
 
   // Filters bar
-  const FiltersBar = ({ hideStateFilter }) => (
+  const renderFiltersBar = (hideStateFilter) => (
     <div style={{ display: "flex", gap: 12, marginBottom: 18, flexWrap: "wrap", alignItems: "center" }}>
       <input
         className="search-bar"
@@ -285,7 +285,13 @@ function Prestamos() {
               {/* Quick active-loans summary */}
               <div className="loans-table-card">
                 <h2>Todos los préstamos activos</h2>
-                <FiltersBar hideStateFilter={true} />
+                {msgDevolver && (
+                  <div className={`alert ${msgDevolver.type === "success" ? "alert-success" : "alert-error"}`}>
+                    {msgDevolver.text}
+                    <button onClick={() => setMsgDevolver(null)} style={{ float: "right", background: "none", border: "none", cursor: "pointer", fontWeight: "bold" }}>✕</button>
+                  </div>
+                )}
+                {renderFiltersBar(true)}
                 {loadingLoans ? <div className="loading">Cargando…</div> : filtered.length === 0 ? (
                   <div className="empty-state">No hay préstamos que coincidan.</div>
                 ) : (
@@ -293,7 +299,7 @@ function Prestamos() {
                     <table>
                       <thead>
                         <tr>
-                          <th>#</th><th>Tipo</th><th>Título</th><th>Usuario</th><th>Fecha</th><th>Estado</th>
+                          <th>#</th><th>Tipo</th><th>Título</th><th>Usuario</th><th>Fecha</th><th>Estado</th><th>Acciones</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -312,6 +318,22 @@ function Prestamos() {
                               <td>{l.campus_id}</td>
                               <td>{formatDate(l.initial_lent_at)}</td>
                               <td><Pill {...sb} /></td>
+                              <td>
+                                <div style={{ display: "flex", gap: 5, flexWrap: "wrap" }}>
+                                  {isActive(l) && (
+                                    <button className="btn-return" onClick={() => handleDevolver(l)}>
+                                      {l.loan_type === "digital" ? "Liberar" : "Devolver"}
+                                    </button>
+                                  )}
+                                  {isActive(l) && (
+                                    <button onClick={() => handleRenovar(l)}
+                                      style={{ padding: "6px 12px", background: "#1565c0", color: "white", border: "none", borderRadius: "6px", fontSize: "0.8rem", fontWeight: 600, cursor: "pointer" }}>
+                                      Renovar
+                                    </button>
+                                  )}
+                                  {!isActive(l) && <span style={{ color: "#aaa", fontSize: "0.8rem" }}>—</span>}
+                                </div>
+                              </td>
                             </tr>
                           );
                         })}
@@ -354,7 +376,7 @@ function Prestamos() {
                   <button onClick={() => setMsgMulta(null)} style={{ float: "right", background: "none", border: "none", cursor: "pointer", fontWeight: "bold" }}>✕</button>
                 </div>
               )}
-              <FiltersBar />
+              {renderFiltersBar(false)}
               {loadingLoans ? <div className="loading">Cargando…</div> : filtered.length === 0 ? (
                 <div className="empty-state">No hay préstamos que coincidan.</div>
               ) : (
