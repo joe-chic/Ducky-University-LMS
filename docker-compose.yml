@@ -166,9 +166,11 @@ services:
       PGDATABASE: ducky_scholar_db
       PGUSER: postgres
       PGPASSWORD: postgres
+      REGISTRY_URL: http://registry-microservice:3009
     depends_on:
       - db-scholar
       - seed-scholar
+      - registry-microservice
     ports: ["3003:3003"]
 
   scholar-bff-service:
@@ -186,6 +188,49 @@ services:
     depends_on: [scholar-bff-service]
     ports: ["3004:3004"]
     hostname: scholar.ducky.local
+
+  # ─── REGISTRY ───────────────────────────────────────────────────────────────────
+  db-registry:
+    image: postgres:16
+    environment:
+      POSTGRES_DB: service_registry_db
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    ports:
+      - "5438:5432"
+
+  seed-registry:
+    image: postgres:16
+    restart: "no"
+    depends_on:
+      - db-registry
+    environment:
+      PGHOST: db-registry
+      PGPORT: 5432
+      PGDATABASE: service_registry_db
+      PGUSER: postgres
+      PGPASSWORD: postgres
+    volumes:
+      - ./db/service_registry_db/service_registry_db.sql:/seed/schema.sql
+      - ./db/service_registry_db/service_registry_db_dummy_data.sql:/seed/data.sql
+    command: >
+      sh -c "until psql -h $$PGHOST -p $$PGPORT -U $$PGUSER -d $$PGDATABASE -c 'select 1' >/dev/null 2>&1; do sleep 1; done;
+      sed -e '/^CREATE DATABASE /d' -e '/^\\\\c /d' /seed/schema.sql | psql -h $$PGHOST -p $$PGPORT -U $$PGUSER -d $$PGDATABASE;
+      sed -e '/^\\\\c /d' /seed/data.sql | psql -v ON_ERROR_STOP=0 -h $$PGHOST -p $$PGPORT -U $$PGUSER -d $$PGDATABASE"
+
+  registry-microservice:
+    build: ./registry-microservice
+    environment:
+      PORT: 3009
+      PGHOST: db-registry
+      PGPORT: 5432
+      PGDATABASE: service_registry_db
+      PGUSER: postgres
+      PGPASSWORD: postgres
+    depends_on:
+      - db-registry
+      - seed-registry
+    ports: ["3009:3009"]
 
   db-human-capital:
     image: postgres:16

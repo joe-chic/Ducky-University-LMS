@@ -1,6 +1,7 @@
 const express = require('express');
 const cors = require('cors');
 const { Pool } = require('pg');
+const http = require('http');
 
 const pool = new Pool({
   host: process.env.PGHOST || 'db-scholar',
@@ -9,6 +10,11 @@ const pool = new Pool({
   user: process.env.PGUSER || 'postgres',
   password: process.env.PGPASSWORD || 'postgres',
 });
+
+// Registry microservice base URL — injected via env in docker-compose
+const REGISTRY_URL = process.env.REGISTRY_URL || 'http://registry-microservice:3009';
+// service_id for ducky-scholar in the registry (matches seed data)
+const SCHOLAR_SERVICE_ID = 4;
 
 const app = express();
 app.use(cors());
@@ -42,6 +48,77 @@ function handleError(res, e) {
 
 function ok(res, row, message) {
   res.json({ message, data: row });
+}
+
+// ─── Registry notification ──────────────────────────────────────────────────
+// Fire-and-forward: sends the new entity to the registry microservice.
+// Does NOT block or fail the scholar response if the registry is unavailable.
+async function notifyRegistry(campus_email) {
+  const payload = JSON.stringify({ campus_email, service_id: SCHOLAR_SERVICE_ID });
+  return new Promise((resolve) => {
+    try {
+      const url = new URL(`${REGISTRY_URL}/api/register`);
+      const options = {
+        hostname: url.hostname,
+        port:     url.port || 80,
+        path:     url.pathname,
+        method:   'POST',
+        headers:  { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(payload) },
+      };
+      const req = http.request(options, (res) => {
+        let body = '';
+        res.on('data', chunk => body += chunk);
+        res.on('end', () => {
+          console.log(`[scholar → registry] status=${res.statusCode} body=${body}`);
+          resolve();
+        });
+      });
+      req.on('error', (err) => {
+        console.warn(`[scholar → registry] Could not reach registry: ${err.message}`);
+        resolve(); // resolve anyway — registry failure must not break scholar flow
+      });
+      req.write(payload);
+      req.end();
+    } catch (err) {
+      console.warn(`[scholar → registry] Unexpected error: ${err.message}`);
+      resolve();
+    }
+  });
+}
+
+// Fire-and-forward: tells the registry to mark the scholar ↔ affiliate
+// association as is_operational=FALSE when a student is disabled.
+async function notifyDeregister(campus_email) {
+  const payload = JSON.stringify({ campus_email, service_id: SCHOLAR_SERVICE_ID });
+  return new Promise((resolve) => {
+    try {
+      const url = new URL(`${REGISTRY_URL}/api/deregister`);
+      const options = {
+        hostname: url.hostname,
+        port:     url.port || 80,
+        path:     url.pathname,
+        method:   'POST',
+        headers:  { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(payload) },
+      };
+      const req = http.request(options, (res) => {
+        let body = '';
+        res.on('data', chunk => body += chunk);
+        res.on('end', () => {
+          console.log(`[scholar → registry] deregister status=${res.statusCode} body=${body}`);
+          resolve();
+        });
+      });
+      req.on('error', (err) => {
+        console.warn(`[scholar → registry] deregister unreachable: ${err.message}`);
+        resolve();
+      });
+      req.write(payload);
+      req.end();
+    } catch (err) {
+      console.warn(`[scholar → registry] deregister unexpected: ${err.message}`);
+      resolve();
+    }
+  });
 }
 
 // ─── DEPARTMENTS ────────────────────────────────────────────────────────────
@@ -92,7 +169,15 @@ app.post('/api/students', async (req, res) => {
       `INSERT INTO students(student_status,student_email,student_phone,first_name,middle_name,father_lastname,mother_lastname,created_at)
        VALUES($1,$2,$3,$4,$5,$6,$7,NOW()) RETURNING *`,
       [student_status, student_email, student_phone, first_name, middle_name || null, father_lastname, mother_lastname || null]);
-    ok(res, r.rows[0], 'Alumno registrado con éxito.');
+
+    const student = r.rows[0];
+
+    // ── Notify registry (fire-and-forward, non-blocking) ──
+    // The scholar microservice reports the new student to the central registry
+    // so the university has a global record of who is affiliated to which service.
+    notifyRegistry(student_email).catch(() => {}); // errors already logged inside
+
+    ok(res, student, 'Alumno registrado con éxito.');
   } catch (e) { handleError(res, e); }
 });
 app.put('/api/students/:id', async (req, res) => {
@@ -106,8 +191,21 @@ app.put('/api/students/:id', async (req, res) => {
 });
 app.delete('/api/students/:id', async (req, res) => {
   try {
-    await pool.query('DELETE FROM students WHERE student_id=$1', [req.params.id]);
-    res.json({ message: 'Alumno eliminado con éxito.', ok: true });
+    // Soft-delete: fetch the student first to get their email for the registry call
+    const lookup = await pool.query('SELECT student_email FROM students WHERE student_id=$1', [req.params.id]);
+    if (!lookup.rows.length) return res.status(404).json({ error: 'Alumno no encontrado.' });
+    const { student_email } = lookup.rows[0];
+
+    // Set status to inactive instead of deleting the record
+    const r = await pool.query(
+      `UPDATE students SET student_status='inactive' WHERE student_id=$1 RETURNING *`,
+      [req.params.id]
+    );
+
+    // Notify registry: mark scholar ↔ affiliate association as no longer operational
+    notifyDeregister(student_email).catch(() => {});
+
+    ok(res, r.rows[0], 'Alumno desactivado con éxito. El registro se conserva en la base de datos.');
   } catch (e) { handleError(res, e); }
 });
 
