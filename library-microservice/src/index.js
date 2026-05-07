@@ -214,7 +214,15 @@ app.get("/resources/:id", async (req, res) => {
           STRING_AGG(DISTINCT l.language_name, ', ') AS lenguajes,
           STRING_AGG(DISTINCT l.language_id::text, ',') AS lenguajes_ids,
           STRING_AGG(DISTINCT pe.example_location_code, ', ') AS ubicacion,
-          STRING_AGG(DISTINCT pe.barcode, ', ') AS codebar
+          STRING_AGG(DISTINCT pe.barcode, ', ') AS codebar,
+          da.resource_parent_id   AS journal_id,
+          rj.resource_title       AS journal_title,
+          pm.periodical_issn      AS journal_issn,
+          pm.periodical_frequency AS journal_frequency,
+          pm.peer_reviewed        AS journal_peer_reviewed,
+          da.digital_article_issue  AS article_issue,
+          da.digital_article_volume AS article_volume,
+          da.digital_article_year   AS article_year
        FROM resources r
        LEFT JOIN collaborators c ON c.colaborator_id = r.author_principal_id
        LEFT JOIN organizations o ON o.organization_id = r.publisher_id
@@ -224,13 +232,34 @@ app.get("/resources/:id", async (req, res) => {
        LEFT JOIN supplementary_languages sl ON sl.resource_id = r.resource_id
        LEFT JOIN languages l ON l.language_id = sl.language_id
        LEFT JOIN physical_examples pe ON pe.resource_id = r.resource_id
+       LEFT JOIN digital_articles da ON da.resource_child_id = r.resource_id
+       LEFT JOIN resources rj ON rj.resource_id = da.resource_parent_id
+       LEFT JOIN periodical_metadata pm ON pm.resource_id = da.resource_parent_id
        WHERE r.resource_id = $1
-       GROUP BY r.resource_id, c.first_name, c.middle_name, c.father_lastname, c.mother_lastname, c.colaborator_id, o.organization_name, o.organization_id, r.resource_state, r.resource_type, r.resource_publication_year, r.resource_cost, bm.book_isbn, bm.book_edition_number, bm.book_synopsis`,
+       GROUP BY r.resource_id, c.first_name, c.middle_name, c.father_lastname, c.mother_lastname,
+                c.colaborator_id, o.organization_name, o.organization_id, r.resource_state,
+                r.resource_type, r.resource_publication_year, r.resource_cost, bm.book_isbn,
+                bm.book_edition_number, bm.book_synopsis, da.resource_parent_id, rj.resource_title,
+                pm.periodical_issn, pm.periodical_frequency, pm.peer_reviewed,
+                da.digital_article_issue, da.digital_article_volume, da.digital_article_year`,
       [id]
     );
 
     if (result.rows.length === 0) return res.status(404).json({ message: "Resource not found" });
-    res.json(resourceRowToDto(result.rows[0]));
+    const row = result.rows[0];
+    const dto = resourceRowToDto(row);
+    // Attach journal fields for digital_article (not covered by resourceRowToDto)
+    if (row.journal_id) {
+      dto.journal_id            = row.journal_id;
+      dto.journal_title         = row.journal_title;
+      dto.journal_issn          = row.journal_issn;
+      dto.journal_frequency     = row.journal_frequency;
+      dto.journal_peer_reviewed = row.journal_peer_reviewed;
+      dto.article_issue         = row.article_issue;
+      dto.article_volume        = row.article_volume;
+      dto.article_year          = row.article_year;
+    }
+    res.json(dto);
   } catch (err) {
     if (err.code === "23505") {
       return res.status(400).json({ error: "Action not permitted: " + (err.detail || "Unique constraint violated.") });
@@ -499,7 +528,7 @@ app.get("/loans", async (req, res) => {
        ORDER BY pl.loan_id DESC`,
       params
     );
-    res.json(result.rows);
+    res.json(result.rows.map(r => ({ ...r, loan_type: 'physical' })));
   } catch (err) {
     if (err.code === "23505") {
       return res.status(400).json({ error: "Action not permitted: " + (err.detail || "Unique constraint violated.") });
@@ -773,16 +802,40 @@ app.put("/resources/:id/digital-metadata", async (req, res) => {
   } catch (err) { console.error(err); res.status(500).json({ error: err.message }); }
 });
 
-// GET /resources/:id/digital-status  — concurrent slot availability
+const DIGITAL_ACCESS_DAYS = 7;
+
+// Auto-expire digital loans whose access window has elapsed
+async function autoExpireDigitalLoans(resourceId) {
+  const resourceFilter = resourceId ? `AND dl.resource_id = ${Number(resourceId)}` : '';
+  // Use INTERVAL string interpolation (safe — value is always a JS number constant)
+  const intervalExpr = `INTERVAL '${DIGITAL_ACCESS_DAYS} days'`;
+  await query(`
+    UPDATE digital_loans dl
+    SET digital_loan_state = 'completed', latest_modified_at = NOW()
+    FROM (
+      SELECT dl2.digital_loan_id,
+             COALESCE(MAX(dlr.renewal_lent_at), dl2.initial_lent_at) AS last_access
+      FROM digital_loans dl2
+      LEFT JOIN digital_loan_renewals dlr ON dlr.digital_loan_id = dl2.digital_loan_id
+      WHERE dl2.digital_loan_state = 'active'
+      GROUP BY dl2.digital_loan_id, dl2.initial_lent_at
+    ) sub
+    WHERE dl.digital_loan_id = sub.digital_loan_id
+      AND sub.last_access < NOW() - ${intervalExpr}
+      ${resourceFilter}
+  `);
+}
+
+// GET /resources/:id/digital-status — concurrent slot availability
 app.get("/resources/:id/digital-status", async (req, res) => {
   try {
     const id = Number(req.params.id);
+    await autoExpireDigitalLoans(id);
     const metaRes = await query(
       `SELECT digital_license_model, digital_max_concurrent_users FROM digital_metadata WHERE resource_id = $1`, [id]
     );
     if (!metaRes.rows.length) return res.status(404).json({ message: "Recurso no encontrado" });
     const { digital_license_model, digital_max_concurrent_users } = metaRes.rows[0];
-
     const activeRes = await query(
       `SELECT COUNT(*)::int AS active_concurrent
        FROM digital_loans WHERE resource_id = $1 AND digital_loan_state = 'active'`, [id]
@@ -794,6 +847,7 @@ app.get("/resources/:id/digital-status", async (req, res) => {
       active_concurrent:  active,
       max_concurrent:     max,
       max_renewals:       DIGITAL_MAX_RENEWALS,
+      access_days:        DIGITAL_ACCESS_DAYS,
       can_access:         digital_license_model !== 'concurrent' || max == null || active < max,
     });
   } catch (err) { console.error(err); res.status(500).json({ error: err.message }); }
@@ -802,24 +856,32 @@ app.get("/resources/:id/digital-status", async (req, res) => {
 // GET /digital-loans?campus_id=&resource_id=&state=
 app.get("/digital-loans", async (req, res) => {
   try {
+    await autoExpireDigitalLoans(null);
     const { campus_id, resource_id, state } = req.query;
     const params = []; const where = [];
-    if (campus_id)   { params.push(Number(campus_id));   where.push(`dl.campus_id = $${params.length}`); }
-    if (resource_id) { params.push(Number(resource_id)); where.push(`dl.resource_id = $${params.length}`); }
-    if (state)       { params.push(state);               where.push(`dl.digital_loan_state = $${params.length}`); }
+    if (campus_id)   { params.push(Number(campus_id));   where.push(`dl.campus_id = ${params.length}`); }
+    if (resource_id) { params.push(Number(resource_id)); where.push(`dl.resource_id = ${params.length}`); }
+    if (state)       { params.push(state);               where.push(`dl.digital_loan_state = ${params.length}`); }
     const whereSql = where.length ? `WHERE ${where.join(" AND ")}` : "";
-
     const r = await query(
       `SELECT dl.digital_loan_id, dl.resource_id, dl.campus_id, dl.initial_lent_at,
               dl.digital_loan_state,
               r.resource_title AS titulo, r.resource_type AS tipo,
-              (SELECT COUNT(*) FROM digital_loan_renewals dlr WHERE dlr.digital_loan_id = dl.digital_loan_id)::int AS renewal_count
+              o.organization_name AS editorial,
+              (SELECT COUNT(*) FROM digital_loan_renewals dlr WHERE dlr.digital_loan_id = dl.digital_loan_id)::int AS renewal_count,
+              da.resource_parent_id AS journal_id,
+              rj.resource_title     AS journal_title,
+              pm.periodical_issn    AS journal_issn
        FROM digital_loans dl
        JOIN resources r ON r.resource_id = dl.resource_id
+       LEFT JOIN organizations o ON o.organization_id = r.publisher_id
+       LEFT JOIN digital_articles da ON da.resource_child_id = dl.resource_id
+       LEFT JOIN resources rj ON rj.resource_id = da.resource_parent_id
+       LEFT JOIN periodical_metadata pm ON pm.resource_id = da.resource_parent_id
        ${whereSql}
        ORDER BY dl.initial_lent_at DESC`, params
     );
-    res.json({ items: r.rows });
+    res.json({ items: r.rows.map(row => ({ ...row, loan_type: "digital" })) });
   } catch (err) { console.error(err); res.status(500).json({ error: err.message }); }
 });
 

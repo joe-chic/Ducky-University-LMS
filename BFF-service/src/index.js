@@ -312,6 +312,73 @@ app.put("/api/fines/:id", (req, res) => proxyTreasury(req, res, `/fines/${req.pa
 app.post("/api/fines/:id/pay", (req, res) => proxyTreasury(req, res, `/fines/${req.params.id}/pay`, "POST"));
 app.get("/api/daily-fine", (req, res) => proxyTreasury(req, res, "/daily-fine", "GET"));
 
+// ── Combined physical + digital loans ────────────────────────────────────────
+app.get("/api/all-loans", async (req, res) => {
+  try {
+    const { campus_id, state, loan_type } = req.query;
+    const opts = { timeout: 10000 };
+    const physParams  = {};
+    const digitalParams = {};
+    if (campus_id) { physParams.campus_id  = campus_id; digitalParams.campus_id  = campus_id; }
+    // Map unified state filter to per-type state values
+    if (state) {
+      physParams.state  = state === "active" ? "active"    : state === "overdue" ? "overdue"   : state;
+      digitalParams.state = state === "active" ? "active"  : state === "completed" ? "completed" : state;
+    }
+
+    const [physRes, digRes] = await Promise.allSettled([
+      loan_type !== "digital"  ? axios.get(`${LIBRARY_BASE_URL}/loans`,         { ...opts, params: physParams    }) : Promise.resolve({ data: [] }),
+      loan_type !== "physical" ? axios.get(`${LIBRARY_BASE_URL}/digital-loans`,  { ...opts, params: digitalParams }) : Promise.resolve({ data: { items: [] } }),
+    ]);
+
+    const physical = (physRes.status === "fulfilled"
+      ? (Array.isArray(physRes.value.data) ? physRes.value.data : [])
+      : []);
+
+    const digital = (digRes.status === "fulfilled"
+      ? (Array.isArray(digRes.value.data?.items) ? digRes.value.data.items : [])
+      : []);
+
+    // Normalise to unified shape
+    const normPhysical = physical.map(l => ({
+      loan_id:         l.loan_id,
+      loan_type:       "physical",
+      state:           l.loan_state,
+      campus_id:       l.campus_id,
+      titulo:          l.titulo,
+      tipo:            "physical_book",
+      barcode:         l.barcode,
+      ubicacion:       l.ubicacion,
+      initial_lent_at: l.initial_lent_at,
+      returned_at:     l.returned_at,
+    }));
+
+    const normDigital = digital.map(l => ({
+      loan_id:         l.digital_loan_id,
+      loan_type:       "digital",
+      state:           l.digital_loan_state,
+      campus_id:       l.campus_id,
+      titulo:          l.titulo,
+      tipo:            l.tipo,
+      barcode:         null,
+      ubicacion:       null,
+      initial_lent_at: l.initial_lent_at,
+      returned_at:     null,
+      renewal_count:   l.renewal_count,
+      journal_title:   l.journal_title,
+      journal_issn:    l.journal_issn,
+    }));
+
+    const merged = [...normPhysical, ...normDigital]
+      .sort((a, b) => new Date(b.initial_lent_at) - new Date(a.initial_lent_at));
+
+    res.json({ items: merged });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: "Error al obtener préstamos combinados" });
+  }
+});
+
 // ── Physical loan renewal & damage details ───────────────────────────────────
 app.post("/api/loans/:id/renew", async (req, res) => {
   try {

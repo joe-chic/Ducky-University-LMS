@@ -533,6 +533,38 @@ function LibroDetalle() {
                     </div>
                   ) : <p style={{ color: "#aaa" }}>Cargando metadatos…</p>}
 
+                  {/* Journal info banner — only for digital_article */}
+                  {libro.tipo === "digital_article" && libro.journal_id && (
+                    <div style={{ background: "linear-gradient(135deg,#f3e5f5,#e8eaf6)", border: "1px solid #ce93d8", borderRadius: "10px", padding: "14px 16px", marginBottom: "12px" }}>
+                      <div style={{ fontSize: "0.72rem", color: "#7b1fa2", fontWeight: 700, letterSpacing: "0.06em", marginBottom: "4px" }}>📰 REVISTA / JOURNAL</div>
+                      <a
+                        href={`/recursos/${libro.journal_id}`}
+                        onClick={e => { e.preventDefault(); navigate(`/recursos/${libro.journal_id}`); }}
+                        style={{ fontWeight: 700, fontSize: "1rem", color: "#4a148c", textDecoration: "none", borderBottom: "2px solid #ce93d8" }}
+                      >
+                        {libro.journal_title}
+                      </a>
+                      <div style={{ display: "flex", gap: "12px", flexWrap: "wrap", marginTop: "8px", fontSize: "0.82rem", color: "#555" }}>
+                        {libro.journal_issn && (
+                          <span style={{ background: "#fff", border: "1px solid #ce93d8", borderRadius: "5px", padding: "2px 8px" }}>
+                            ISSN: <strong>{libro.journal_issn}</strong>
+                          </span>
+                        )}
+                        {libro.journal_frequency && (
+                          <span style={{ textTransform: "capitalize" }}>🗓 {libro.journal_frequency}</span>
+                        )}
+                        {libro.journal_peer_reviewed && (
+                          <span style={{ background: "#e8f5e9", color: "#2e7d32", border: "1px solid #a5d6a7", borderRadius: "5px", padding: "2px 8px", fontWeight: 700 }}>
+                            ✔ Peer-reviewed
+                          </span>
+                        )}
+                        {libro.article_volume && <span>Vol. {libro.article_volume}</span>}
+                        {libro.article_issue  && <span>No. {libro.article_issue}</span>}
+                        {libro.article_year   && <span>({libro.article_year})</span>}
+                      </div>
+                    </div>
+                  )}
+
                   {/* Admin/Lib: digital metadata editor */}
                   {hasManagementRole && (
                     <div style={{ marginTop: "12px" }}>
