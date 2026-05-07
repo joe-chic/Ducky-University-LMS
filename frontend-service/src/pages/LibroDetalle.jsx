@@ -234,19 +234,46 @@ function LibroDetalle() {
               <hr className="libro-divider" />
 
               <div className="libro-ubicacion">
-                <h3>Ubicación en biblioteca</h3>
+                <h3>Ejemplares Físicos</h3>
                 {ejemplares.length === 0 ? (
-                  <p style={{ color: "#999" }}>No hay ejemplares físicos registrados.</p>
+                  <p style={{ color: "#999" }}>No hay ejemplares físicos registrados para este recurso.</p>
                 ) : (
-                  <div className="libro-ubicacion-card">
-                    <div className="libro-ubicacion-icon">📍</div>
-                    <div>
-                      <p className="libro-ubicacion-texto">{libro.ubicacion || "Sin ubicación registrada"}</p>
-                      <div className="libro-ubicacion-badges">
-                        <span className="libro-badge-disponible">{disponibles} Disponible{disponibles !== 1 ? "s" : ""}</span>
-                        {enPrestamo > 0 && <span className="libro-badge-prestamo">{enPrestamo} en Préstamo</span>}
-                      </div>
-                    </div>
+                  <div style={{ overflowX: "auto" }}>
+                    <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "0.87rem" }}>
+                      <thead>
+                        <tr style={{ background: "#f5f5f5", borderBottom: "2px solid #e0e0e0" }}>
+                          <th style={{ padding: "8px 12px", textAlign: "left", fontWeight: 600, color: "#555" }}>Código de Barras</th>
+                          <th style={{ padding: "8px 12px", textAlign: "left", fontWeight: 600, color: "#555" }}>Ubicación</th>
+                          <th style={{ padding: "8px 12px", textAlign: "left", fontWeight: 600, color: "#555" }}>Estado Físico</th>
+                          <th style={{ padding: "8px 12px", textAlign: "left", fontWeight: 600, color: "#555" }}>Disponibilidad</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {ejemplares.map((ej, i) => {
+                          const opState = ej.example_op_state;
+                          const available = opState === "available";
+                          const badgeColor = available ? "#2E8B57" : opState === "on loan" ? "#b71c1c" : "#795548";
+                          const badgeLabel = opState === "available" ? "Disponible"
+                            : opState === "on loan" ? "En Préstamo"
+                            : opState === "reserved" ? "Reservado"
+                            : opState === "internal consultation only" ? "Consulta Interna"
+                            : opState === "in transit" ? "En Tránsito"
+                            : opState;
+                          return (
+                            <tr key={ej.barcode || i} style={{ borderBottom: "1px solid #eee" }}>
+                              <td style={{ padding: "8px 12px", fontFamily: "monospace", fontSize: "0.85rem", color: "#333" }}>{ej.barcode}</td>
+                              <td style={{ padding: "8px 12px", color: "#555" }}>{ej.example_location_code}</td>
+                              <td style={{ padding: "8px 12px", textTransform: "capitalize", color: "#666" }}>{ej.example_health_state}</td>
+                              <td style={{ padding: "8px 12px" }}>
+                                <span style={{ background: badgeColor, color: "#fff", borderRadius: "12px", padding: "3px 10px", fontSize: "0.78rem", fontWeight: 600, whiteSpace: "nowrap" }}>
+                                  {badgeLabel}
+                                </span>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
                   </div>
                 )}
               </div>

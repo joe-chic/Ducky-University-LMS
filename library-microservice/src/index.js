@@ -60,7 +60,7 @@ app.get("/library-metadata", async (req, res) => {
   }
 });
 
-// GET /resources?search=&page=&pageSize=&lenguaje=&categoria=&autor=&editorial=&anio=
+// GET /resources?search=&page=&pageSize=&lenguaje=&categoria=&autor=&editorial=&anio=&tipo=
 app.get("/resources", async (req, res) => {
   try {
     const search    = String(req.query.search    || "").trim();
@@ -69,6 +69,7 @@ app.get("/resources", async (req, res) => {
     const autor     = String(req.query.autor     || "").trim();
     const editorial = String(req.query.editorial || "").trim();
     const anio      = req.query.anio ? Number(req.query.anio) : null;
+    const tipo      = String(req.query.tipo      || "").trim();
     const page      = Math.max(1, Number(req.query.page || 1));
     const pageSize  = Math.min(50, Math.max(1, Number(req.query.pageSize || 10)));
     const offset    = (page - 1) * pageSize;
@@ -118,6 +119,11 @@ app.get("/resources", async (req, res) => {
     if (anio) {
       params.push(anio);
       where.push(`r.resource_publication_year = $${params.length}`);
+    }
+
+    if (tipo) {
+      params.push(tipo);
+      where.push(`r.resource_type = $${params.length}`);
     }
 
     const whereSql = where.length > 0 ? `WHERE ${where.join(" AND ")}` : "";

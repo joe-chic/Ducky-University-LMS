@@ -40,7 +40,7 @@ function Sidebar({ isOpen, onClose }) {
           <div className="sidebar-menu">
             {item("Inicio", "/home", true)}
             {isAdmin && item("Usuarios", "/usuarios")}
-            {item("Libros", "/libros")}
+            {item("Recursos", "/libros")}
             {hasManagementRole && item("Prestamos", "/prestamos", true)}
             {!hasManagementRole && item("Mis Prestamos", "/mis-prestamos", true)}
             {!hasManagementRole && item("Devoluciones", "/devoluciones", true)}

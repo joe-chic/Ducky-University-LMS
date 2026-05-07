@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import "./Usuarios.css";
 import searchIcon from "../assets/icons/searchIcon.svg";
@@ -11,6 +11,88 @@ import searchPngIcon from "../assets/icons/icon-search.png";
 import Sidebar from "../components/Sidebar";
 import TopBar from "../components/TopBar";
 import { bffGet, bffPost, bffPut, getToken } from "../api/bff";
+
+// ── Searchable dropdown filter ────────────────────────────────────────────────
+function SearchableSelect({ label, value, onChange, options }) {
+  const [open, setOpen] = useState(false);
+  const [search, setSearch] = useState("");
+  const ref = useRef(null);
+
+  // Close on outside click
+  useEffect(() => {
+    const handler = (e) => { if (ref.current && !ref.current.contains(e.target)) setOpen(false); };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, []);
+
+  const filtered = options.filter(o =>
+    o.toLowerCase().includes(search.toLowerCase())
+  );
+  const displayLabel = value || label;
+
+  return (
+    <div ref={ref} style={{ position: "relative", marginTop: "10px" }}>
+      <button
+        onClick={() => { setOpen(o => !o); setSearch(""); }}
+        style={{
+          width: "100%", textAlign: "left", padding: "5px 8px",
+          background: value ? "#1a1a2e" : "#F8F9FA",
+          color: value ? "#FFD400" : "#212529",
+          fontSize: "13px", border: "1px solid #212529", borderRadius: "5px",
+          cursor: "pointer", display: "flex", justifyContent: "space-between", alignItems: "center"
+        }}
+      >
+        <span style={{ textTransform: "capitalize" }}>{displayLabel.replace(/_/g, " ")}</span>
+        <span style={{ fontSize: "10px", opacity: 0.6 }}>{open ? "▲" : "▼"}</span>
+      </button>
+      {open && (
+        <div style={{
+          position: "absolute", top: "100%", left: 0, right: 0, zIndex: 200,
+          background: "#fff", border: "1px solid #ddd", borderRadius: "5px",
+          boxShadow: "0 4px 12px rgba(0,0,0,0.15)", maxHeight: "200px", overflowY: "auto"
+        }}>
+          <input
+            autoFocus
+            type="text"
+            placeholder="Buscar..."
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+            style={{
+              width: "100%", padding: "6px 8px", border: "none",
+              borderBottom: "1px solid #eee", outline: "none", fontSize: "12px",
+              boxSizing: "border-box"
+            }}
+          />
+          {value && (
+            <div
+              onClick={() => { onChange(""); setOpen(false); }}
+              style={{ padding: "6px 10px", color: "#999", fontSize: "12px", cursor: "pointer", fontStyle: "italic" }}
+            >
+              — Limpiar selección —
+            </div>
+          )}
+          {filtered.length === 0 && (
+            <div style={{ padding: "8px 10px", color: "#aaa", fontSize: "12px" }}>Sin resultados</div>
+          )}
+          {filtered.map(o => (
+            <div
+              key={o}
+              onClick={() => { onChange(o); setOpen(false); }}
+              style={{
+                padding: "6px 10px", fontSize: "13px", cursor: "pointer",
+                background: value === o ? "#fff8e1" : "transparent",
+                fontWeight: value === o ? 600 : 400,
+                textTransform: "capitalize"
+              }}
+            >
+              {o.replace(/_/g, " ")}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
 
 function Libros() {
   const navigate = useNavigate();
@@ -31,7 +113,7 @@ function Libros() {
   const pageSize = 10;
 
   const [metadata, setMetadata] = useState({ authors: [], publishers: [], categories: [], languages: [] });
-  const [filtros, setFiltros] = useState({ lenguaje: "", categoria: "", autor: "", editorial: "", anio: "" });
+  const [filtros, setFiltros] = useState({ lenguaje: "", categoria: "", autor: "", editorial: "", anio: "", tipo: "" });
 
   const [msgPrestamo, setMsgPrestamo] = useState(null);
   const [loadingPrestamo, setLoadingPrestamo] = useState(false);
@@ -63,11 +145,12 @@ function Libros() {
     try {
       const token = getToken();
       const params = { search: busqueda, page, pageSize };
-      if (filtros.lenguaje) params.lenguaje = filtros.lenguaje;
+      if (filtros.lenguaje)  params.lenguaje  = filtros.lenguaje;
       if (filtros.categoria) params.categoria = filtros.categoria;
-      if (filtros.autor) params.autor = filtros.autor;
+      if (filtros.autor)     params.autor     = filtros.autor;
       if (filtros.editorial) params.editorial = filtros.editorial;
-      if (filtros.anio) params.anio = filtros.anio;
+      if (filtros.anio)      params.anio      = filtros.anio;
+      if (filtros.tipo)      params.tipo      = filtros.tipo;
       const data = await bffGet("/api/resources", { token, params });
       setRecursos(data.items || []);
       setTotal(data.total || 0);
@@ -303,48 +386,56 @@ function Libros() {
             )}
           </div>
 
-          {/* Panel filtros — misma clase y estilo que panel de permisos */}
+          {/* Panel filtros */}
           <div className="permisos-panel">
-            <h3 className="permisos-title">Filtrar Libros</h3>
+            <h3 className="permisos-title">Filtrar Recursos</h3>
             <hr />
 
-            {[
-              { label: "Idioma", key: "lenguaje", options: metadata.languages.map(l => l.name) },
-              { label: "Categoría", key: "categoria", options: metadata.categories.map(c => c.name) },
-              { label: "Autor", key: "autor", options: metadata.authors.map(a => a.name) },
-              { label: "Editorial", key: "editorial", options: metadata.publishers.map(p => p.name) },
-            ].map(f => (
-              <div key={f.key} style={{ marginTop: "10px" }}>
-                <select
-                  value={filtros[f.key]}
-                  onChange={e => { setFiltros(prev => ({ ...prev, [f.key]: e.target.value })); setPage(1); }}
-                  className="permiso-rol-header"
-                  style={{ width: "100%", cursor: "pointer", background: "#F8F9FA", fontSize: "14px", border: "1px solid #212529", borderRadius: "5px", padding: "4px 8px" }}
-                >
-                  <option value="">{f.label}</option>
-                  {f.options.map(o => <option key={o} value={o}>{o}</option>)}
-                </select>
-              </div>
-            ))}
-
-            <div style={{ marginTop: "10px" }}>
-              <select
-                value={filtros.anio}
-                onChange={e => { setFiltros(prev => ({ ...prev, anio: e.target.value })); setPage(1); }}
-                className="permiso-rol-header"
-                style={{ width: "100%", cursor: "pointer", background: "#F8F9FA", fontSize: "14px", border: "1px solid #212529", borderRadius: "5px", padding: "4px 8px" }}
-              >
-                <option value="">Año</option>
-                {[2024,2023,2022,2021,2020,2019,2018,2015,2010,2005,2000].map(y => (
-                  <option key={y} value={y}>{y}</option>
-                ))}
-              </select>
-            </div>
+            <SearchableSelect
+              label="Idioma"
+              value={filtros.lenguaje}
+              onChange={v => { setFiltros(p => ({ ...p, lenguaje: v })); setPage(1); }}
+              options={metadata.languages.map(l => l.name)}
+            />
+            <SearchableSelect
+              label="Categoría"
+              value={filtros.categoria}
+              onChange={v => { setFiltros(p => ({ ...p, categoria: v })); setPage(1); }}
+              options={metadata.categories.map(c => c.name)}
+            />
+            <SearchableSelect
+              label="Autor"
+              value={filtros.autor}
+              onChange={v => { setFiltros(p => ({ ...p, autor: v })); setPage(1); }}
+              options={metadata.authors.map(a => a.name)}
+            />
+            <SearchableSelect
+              label="Editorial"
+              value={filtros.editorial}
+              onChange={v => { setFiltros(p => ({ ...p, editorial: v })); setPage(1); }}
+              options={metadata.publishers.map(p => p.name)}
+            />
+            <SearchableSelect
+              label="Tipo de Recurso"
+              value={filtros.tipo}
+              onChange={v => { setFiltros(p => ({ ...p, tipo: v })); setPage(1); }}
+              options={[
+                "book", "e_book", "digital_article", "journal_magazine",
+                "thesis_dissertation", "reference", "video", "audio_music",
+                "conference_proceeding", "dataset", "software", "map", "manuscript"
+              ]}
+            />
+            <SearchableSelect
+              label="Año"
+              value={filtros.anio}
+              onChange={v => { setFiltros(p => ({ ...p, anio: v })); setPage(1); }}
+              options={[2024,2023,2022,2021,2020,2019,2018,2015,2010,2005,2000].map(String)}
+            />
 
             {Object.values(filtros).some(v => v) && (
               <div style={{ marginTop: "10px" }}>
                 <button
-                  onClick={() => { setFiltros({ lenguaje: "", categoria: "", autor: "", editorial: "", anio: "" }); setPage(1); }}
+                  onClick={() => { setFiltros({ lenguaje: "", categoria: "", autor: "", editorial: "", anio: "", tipo: "" }); setPage(1); }}
                   className="btn-cancelar"
                   style={{ width: "100%", fontSize: "12px" }}
                 >
