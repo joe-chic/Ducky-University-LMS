@@ -25,6 +25,7 @@ function Prestamos() {
   const [filterState, setFilterState] = useState("active");
   const [filterType, setFilterType]   = useState("all");   // all | physical | digital
   const [msgDevolver, setMsgDevolver] = useState(null);
+  const [currentPagePrestar, setCurrentPagePrestar] = useState(1);
 
   // Multas
   const [fines, setFines]           = useState([]);
@@ -202,7 +203,7 @@ function Prestamos() {
   const isActive = l => l.state === "active" || l.state === "overdue";
 
   // Filters bar
-  const FiltersBar = () => (
+  const FiltersBar = ({ hideStateFilter }) => (
     <div style={{ display: "flex", gap: 12, marginBottom: 18, flexWrap: "wrap", alignItems: "center" }}>
       <input
         className="search-bar"
@@ -211,13 +212,15 @@ function Prestamos() {
         value={search}
         onChange={e => setSearch(e.target.value)}
       />
-      <select value={filterState} onChange={e => setFilterState(e.target.value)}
-        style={{ padding: "10px 14px", border: "1.5px solid #dde1e9", borderRadius: 8, fontSize: "0.95rem", background: "#fafafa" }}>
-        <option value="">Todos los estados</option>
-        <option value="active">Activos</option>
-        <option value="overdue">Vencidos</option>
-        <option value="completed">Completados</option>
-      </select>
+      {!hideStateFilter && (
+        <select value={filterState} onChange={e => setFilterState(e.target.value)}
+          style={{ padding: "10px 14px", border: "1.5px solid #dde1e9", borderRadius: 8, fontSize: "0.95rem", background: "#fafafa" }}>
+          <option value="">Todos los estados</option>
+          <option value="active">Activos</option>
+          <option value="overdue">Vencidos</option>
+          <option value="completed">Completados</option>
+        </select>
+      )}
       <select value={filterType} onChange={e => setFilterType(e.target.value)}
         style={{ padding: "10px 14px", border: "1.5px solid #dde1e9", borderRadius: 8, fontSize: "0.95rem", background: "#fafafa" }}>
         <option value="all">Todos los tipos</option>
@@ -241,10 +244,10 @@ function Prestamos() {
 
         <div className="prestamos-container">
           <div className="prestamos-header">
-            <h1>Préstamos y Devoluciones</h1>
+            <h1>Préstamos y Multas</h1>
             <div className="tabs">
               <button className={`tab-btn ${tab === "prestar"  ? "active" : ""}`} onClick={() => setTab("prestar")}>Nuevo Préstamo</button>
-              <button className={`tab-btn ${tab === "devolver" ? "active" : ""}`} onClick={() => setTab("devolver")}>Préstamos Activos</button>
+              <button className={`tab-btn ${tab === "devolver" ? "active" : ""}`} onClick={() => setTab("devolver")}>Préstamos</button>
               <button className={`tab-btn ${tab === "multas"   ? "active" : ""}`} onClick={() => setTab("multas")}>Multas</button>
             </div>
           </div>
@@ -281,37 +284,54 @@ function Prestamos() {
               {/* Quick active-loans summary */}
               <div className="loans-table-card">
                 <h2>Todos los préstamos activos</h2>
-                <FiltersBar />
+                <FiltersBar hideStateFilter={true} />
                 {loadingLoans ? <div className="loading">Cargando…</div> : filtered.length === 0 ? (
                   <div className="empty-state">No hay préstamos que coincidan.</div>
                 ) : (
-                  <table>
-                    <thead>
-                      <tr>
-                        <th>#</th><th>Tipo</th><th>Título</th><th>Usuario</th><th>Fecha</th><th>Estado</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {filtered.map(l => {
-                        const sb = stateBadge(l.state, l.loan_type);
-                        const tb = typeBadge(l.loan_type, l.tipo);
-                        return (
-                          <tr key={`${l.loan_type}-${l.loan_id}`}>
-                            <td>{l.loan_id}</td>
-                            <td><Pill {...tb} /></td>
-                            <td>
-                              <div style={{ fontWeight: 600 }}>{l.titulo}</div>
-                              {l.journal_title && <div style={{ fontSize: "0.75rem", color: "#888" }}>{l.journal_title} {l.journal_issn ? `· ISSN ${l.journal_issn}` : ""}</div>}
-                              {l.barcode && <code style={{ fontSize: "0.75rem", color: "#666" }}>{l.barcode}</code>}
-                            </td>
-                            <td>{l.campus_id}</td>
-                            <td>{formatDate(l.initial_lent_at)}</td>
-                            <td><Pill {...sb} /></td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
+                  <>
+                    <table>
+                      <thead>
+                        <tr>
+                          <th>#</th><th>Tipo</th><th>Título</th><th>Usuario</th><th>Fecha</th><th>Estado</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {filtered.slice((currentPagePrestar - 1) * 20, currentPagePrestar * 20).map(l => {
+                          const sb = stateBadge(l.state, l.loan_type);
+                          const tb = typeBadge(l.loan_type, l.tipo);
+                          return (
+                            <tr key={`${l.loan_type}-${l.loan_id}`}>
+                              <td>{l.loan_id}</td>
+                              <td><Pill {...tb} /></td>
+                              <td>
+                                <div style={{ fontWeight: 600 }}>{l.titulo}</div>
+                                {l.journal_title && <div style={{ fontSize: "0.75rem", color: "#888" }}>{l.journal_title} {l.journal_issn ? `· ISSN ${l.journal_issn}` : ""}</div>}
+                                {l.barcode && <code style={{ fontSize: "0.75rem", color: "#666" }}>{l.barcode}</code>}
+                              </td>
+                              <td>{l.campus_id}</td>
+                              <td>{formatDate(l.initial_lent_at)}</td>
+                              <td><Pill {...sb} /></td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                    {filtered.length > 20 && (
+                      <div style={{ display: "flex", justifyContent: "center", gap: "10px", marginTop: "15px" }}>
+                        <button 
+                          disabled={currentPagePrestar === 1}
+                          onClick={() => setCurrentPagePrestar(p => p - 1)}
+                          style={{ padding: "5px 12px", border: "1px solid #ccc", borderRadius: "5px", cursor: currentPagePrestar === 1 ? "not-allowed" : "pointer" }}
+                        >Anterior</button>
+                        <span style={{ padding: "5px" }}>Página {currentPagePrestar} de {Math.ceil(filtered.length / 20)}</span>
+                        <button 
+                          disabled={currentPagePrestar === Math.ceil(filtered.length / 20)}
+                          onClick={() => setCurrentPagePrestar(p => p + 1)}
+                          style={{ padding: "5px 12px", border: "1px solid #ccc", borderRadius: "5px", cursor: currentPagePrestar === Math.ceil(filtered.length / 20) ? "not-allowed" : "pointer" }}
+                        >Siguiente</button>
+                      </div>
+                    )}
+                  </>
                 )}
               </div>
             </>
