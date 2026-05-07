@@ -24,6 +24,7 @@ function Login() {
       localStorage.setItem("ducky_role", data.user.rol);
       localStorage.setItem("ducky_nombre", data.user.nombre || "");
       localStorage.setItem("ducky_correo", data.user.correo || usuario);
+      localStorage.setItem("ducky_campus_id", data.user.campus_id || "");
       navigate("/home");
     } catch (err) {
       alert(err.message || "No se pudo iniciar sesión");
