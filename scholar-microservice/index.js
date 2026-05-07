@@ -121,6 +121,40 @@ async function notifyDeregister(campus_email) {
   });
 }
 
+// Fire-and-forward: tells the registry to update campus_email when it changes.
+async function notifyEmailUpdate(old_email, new_email) {
+  const payload = JSON.stringify({ old_email, new_email });
+  return new Promise((resolve) => {
+    try {
+      const url = new URL(`${REGISTRY_URL}/api/update-email`);
+      const options = {
+        hostname: url.hostname,
+        port:     url.port || 80,
+        path:     url.pathname,
+        method:   'POST',
+        headers:  { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(payload) },
+      };
+      const req = http.request(options, (res) => {
+        let body = '';
+        res.on('data', chunk => body += chunk);
+        res.on('end', () => {
+          console.log(`[scholar → registry] update-email status=${res.statusCode} body=${body}`);
+          resolve();
+        });
+      });
+      req.on('error', (err) => {
+        console.warn(`[scholar → registry] update-email unreachable: ${err.message}`);
+        resolve();
+      });
+      req.write(payload);
+      req.end();
+    } catch (err) {
+      console.warn(`[scholar → registry] update-email unexpected: ${err.message}`);
+      resolve();
+    }
+  });
+}
+
 // ─── DEPARTMENTS ────────────────────────────────────────────────────────────
 app.get('/api/departments', async (req, res) => {
   const page = parseInt(req.query.page) || 1;
@@ -183,9 +217,20 @@ app.post('/api/students', async (req, res) => {
 app.put('/api/students/:id', async (req, res) => {
   const { student_status, student_email, student_phone, first_name, middle_name, father_lastname, mother_lastname } = req.body;
   try {
+    // Fetch current email BEFORE updating so we can detect a change
+    const before = await pool.query('SELECT student_email FROM students WHERE student_id=$1', [req.params.id]);
+    if (!before.rows.length) return res.status(404).json({ error: 'Alumno no encontrado.' });
+    const old_email = before.rows[0].student_email;
+
     const r = await pool.query(
       `UPDATE students SET student_status=$1,student_email=$2,student_phone=$3,first_name=$4,middle_name=$5,father_lastname=$6,mother_lastname=$7 WHERE student_id=$8 RETURNING *`,
       [student_status, student_email, student_phone, first_name, middle_name || null, father_lastname, mother_lastname || null, req.params.id]);
+
+    // If the email changed, notify the registry to keep it in sync
+    if (old_email && student_email && old_email !== student_email) {
+      notifyEmailUpdate(old_email, student_email).catch(() => {});
+    }
+
     ok(res, r.rows[0], 'Alumno actualizado con éxito.');
   } catch (e) { handleError(res, e); }
 });

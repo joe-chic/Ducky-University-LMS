@@ -209,6 +209,41 @@ app.post('/api/deregister', async (req, res) => {
   } catch (e) { handleError(res, e); }
 });
 
+// ─── POST /api/update-email ──────────────────────────────────────────────────
+// Called by microservices when an affiliate's email address changes.
+// Finds the affiliate by their OLD email and replaces it with the NEW email.
+// All service associations (affiliates_services rows) are preserved unchanged.
+//
+// Body:
+//   old_email  {string}  — the affiliate's current email in the registry
+//   new_email  {string}  — the replacement email
+app.post('/api/update-email', async (req, res) => {
+  const { old_email, new_email } = req.body || {};
+  if (!old_email || !new_email) {
+    return res.status(400).json({ error: 'Se requieren old_email y new_email.' });
+  }
+  if (old_email === new_email) {
+    return res.status(200).json({ message: 'El correo no cambió, no se realizó ninguna actualización.' });
+  }
+  try {
+    const r = await pool.query(
+      `UPDATE university_affiliates
+       SET campus_email = $1
+       WHERE campus_email = $2
+       RETURNING *`,
+      [new_email, old_email]
+    );
+    if (!r.rows.length) {
+      return res.status(404).json({ error: `No se encontró ningún afiliado con el correo: ${old_email}` });
+    }
+    console.log(`[registry] Email updated: ${old_email} → ${new_email} (campus_id=${r.rows[0].campus_id})`);
+    res.json({
+      message: `Correo actualizado con éxito: ${old_email} → ${new_email}.`,
+      affiliate: r.rows[0],
+    });
+  } catch (e) { handleError(res, e); }
+});
+
 // ─── DELETE /api/affiliates/:campus_id ──────────────────────────────────────
 app.delete('/api/affiliates/:campus_id', async (req, res) => {
   const client = await pool.connect();
