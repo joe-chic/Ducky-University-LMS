@@ -435,6 +435,33 @@ app.listen(PORT, () => {
 // PRÉSTAMOS Y DEVOLUCIONES
 // -------------------------------------------------------------
 
+// Helper: add N business days to a date (skips Sat/Sun)
+function addBusinessDays(date, days) {
+  const result = new Date(date);
+  let added = 0;
+  while (added < days) {
+    result.setDate(result.getDate() + 1);
+    const dow = result.getDay();
+    if (dow !== 0 && dow !== 6) added++; // skip Sat(6) and Sun(0)
+  }
+  return result;
+}
+
+// Helper: count business days between two dates
+function businessDaysBetween(start, end) {
+  let count = 0;
+  const cur = new Date(start);
+  cur.setHours(0, 0, 0, 0);
+  const fin = new Date(end);
+  fin.setHours(0, 0, 0, 0);
+  while (cur < fin) {
+    cur.setDate(cur.getDate() + 1);
+    const dow = cur.getDay();
+    if (dow !== 0 && dow !== 6) count++;
+  }
+  return count;
+}
+
 // GET /loans?campus_id=&state=
 app.get("/loans", async (req, res) => {
   try {
@@ -471,6 +498,39 @@ app.get("/loans", async (req, res) => {
     if (err.code === "23505") {
       return res.status(400).json({ error: "Action not permitted: " + (err.detail || "Unique constraint violated.") });
     }
+    console.error(err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// GET /loans/receipt/:id — retrieve full loan receipt
+app.get("/loans/receipt/:id", async (req, res) => {
+  try {
+    const loan_id = Number(req.params.id);
+    const result = await query(
+      `SELECT
+         pl.loan_id,
+         pl.barcode,
+         pl.campus_id,
+         pl.initial_lent_at,
+         pl.loan_state,
+         r.resource_title  AS titulo,
+         CONCAT_WS(' ', c.first_name, c.father_lastname) AS autor,
+         pe.example_location_code AS ubicacion,
+         pe.example_health_state  AS estado_fisico
+       FROM physical_loans pl
+       JOIN physical_examples pe ON pe.barcode = pl.barcode
+       JOIN resources r          ON r.resource_id = pe.resource_id
+       LEFT JOIN collaborators c ON c.colaborator_id = r.author_principal_id
+       WHERE pl.loan_id = $1`,
+      [loan_id]
+    );
+    if (!result.rows.length) return res.status(404).json({ error: "Préstamo no encontrado." });
+    const row = result.rows[0];
+    // Attach computed due_date (5 business days from initial_lent_at)
+    row.due_date = addBusinessDays(new Date(row.initial_lent_at), 5);
+    res.json(row);
+  } catch (err) {
     console.error(err);
     res.status(500).json({ error: err.message });
   }
@@ -516,22 +576,38 @@ app.post("/loans", async (req, res) => {
   }
 });
 
-// PUT /loans/:id/return  — devolver
+// PUT /loans/:id/return  — devolver + detectar mora
 app.put("/loans/:id/return", async (req, res) => {
   const client = await pool.connect();
   try {
     await client.query("BEGIN");
     const loan_id = Number(req.params.id);
     const loan = await client.query(
-      `SELECT barcode, loan_state FROM physical_loans WHERE loan_id = $1`, [loan_id]
+      `SELECT pl.barcode, pl.loan_state, pl.initial_lent_at, pl.campus_id,
+              r.resource_title, pe.example_location_code
+       FROM physical_loans pl
+       JOIN physical_examples pe ON pe.barcode = pl.barcode
+       JOIN resources r ON r.resource_id = pe.resource_id
+       WHERE pl.loan_id = $1`,
+      [loan_id]
     );
     if (!loan.rows.length) return res.status(404).json({ message: "Préstamo no encontrado" });
     if (loan.rows[0].loan_state === "completed")
       return res.status(409).json({ message: "El préstamo ya fue completado" });
 
+    const returnedAt = new Date();
+    const loanedAt  = new Date(loan.rows[0].initial_lent_at);
+    const dueDate   = addBusinessDays(loanedAt, 5);
+    const overdueDays = returnedAt > dueDate ? businessDaysBetween(dueDate, returnedAt) : 0;
+    const DAILY_FINE  = 5.00; // $5 MXN per business day
+    const fineAmount  = overdueDays > 0 ? +(overdueDays * DAILY_FINE).toFixed(2) : 0;
+    const finalState  = overdueDays > 0 ? 'overdue' : 'completed';
+
     await client.query(
-      `UPDATE physical_loans SET loan_state = 'completed', returned_at = NOW(), latest_modified_at = NOW() WHERE loan_id = $1`,
-      [loan_id]
+      `UPDATE physical_loans
+       SET loan_state = $1, returned_at = $2, latest_modified_at = NOW()
+       WHERE loan_id = $3`,
+      [finalState, returnedAt, loan_id]
     );
     await client.query(
       `UPDATE physical_examples SET example_op_state = 'available', latest_modified_at = NOW() WHERE barcode = $1`,
@@ -539,7 +615,19 @@ app.put("/loans/:id/return", async (req, res) => {
     );
 
     await client.query("COMMIT");
-    res.json({ ok: true });
+
+    res.json({
+      ok: true,
+      loan_id,
+      overdue_days: overdueDays,
+      fine_amount: fineAmount,
+      fine_currency: 'MXN',
+      due_date: dueDate,
+      returned_at: returnedAt,
+      // Include enough context for the BFF to create the fine in treasury
+      campus_id:  loan.rows[0].campus_id,
+      titulo:     loan.rows[0].resource_title,
+    });
   } catch (err) {
     await client.query("ROLLBACK");
     console.error(err);

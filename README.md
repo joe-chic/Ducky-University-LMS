@@ -44,6 +44,7 @@ Wait ~20 seconds for seeds to complete, then open any of the portals below.
 | Email | `ada.lovelace@ducky.edu` |
 | Password | `admin` |
 | Role | Administrador |
+| **campus_id** | `1001` |
 | Access | Full access: user management, resource management, catalog |
 
 ### Librarian
@@ -52,6 +53,7 @@ Wait ~20 seconds for seeds to complete, then open any of the portals below.
 | Email | `grace.hopper@ducky.edu` |
 | Password | `grace` |
 | Role | Bibliotecario |
+| **campus_id** | `1002` |
 | Access | Resource management + catalog (no user management) |
 
 ### Professor / Staff
@@ -60,14 +62,15 @@ Wait ~20 seconds for seeds to complete, then open any of the portals below.
 | Email | `alan.turing@ducky.edu` |
 | Password | `alan` |
 | Role | Profesor |
+| **campus_id** | `1003` |
 | Access | Read-only catalog view |
 
 ### Students
-| Email | Password | Name |
-|-------|----------|------|
-| `student2001@ducky.edu` | `maria` | Maria Gonzalez |
-| `student2002@ducky.edu` | `luis`  | Luis Perez |
-| `student2003@ducky.edu` | `sofia` | Sofia Ramirez |
+| Email | Password | Name | campus_id |
+|-------|----------|------|-----------|
+| `student2001@ducky.edu` | `maria` | Maria Gonzalez | `2001` |
+| `student2002@ducky.edu` | `luis`  | Luis Perez | `2002` |
+| `student2003@ducky.edu` | `sofia` | Sofia Ramirez | `2003` |
 
 > Students have read-only catalog access. They **cannot** see User Management or Resource Management sections.
 

@@ -24,6 +24,7 @@ function LibroDetalle() {
   const [loading, setLoading] = useState(true);
   const [msg, setMsg] = useState(null);
   const [loadingPrestamo, setLoadingPrestamo] = useState(false);
+  const [receiptData, setReceiptData] = useState(null); // loan receipt modal
   const [modalEditarAbierto, setModalEditarAbierto] = useState(false);
   const [recursoEditando, setRecursoEditando] = useState(null);
   const [metadata, setMetadata] = useState({ authors: [], publishers: [], categories: [], languages: [] });
@@ -111,7 +112,15 @@ function LibroDetalle() {
     try {
       const token = getToken();
       const res = await bffPost("/api/loans", { barcode: available.barcode, campus_id: campusId }, { token });
-      setMsg({ type: "success", text: `Préstamo solicitado correctamente (ID: ${res.loan_id}). Recoge tu libro en biblioteca.` });
+      // Store full receipt for the modal
+      setReceiptData(res.boleta || {
+        loan_id:        res.loan_id,
+        titulo:         libro?.titulo,
+        barcode:        available.barcode,
+        initial_lent_at: new Date(),
+        due_date:       null,
+        instrucciones:  "Devólvelo en biblioteca en un máximo de 5 días hábiles.",
+      });
       fetchLibro();
     } catch (err) {
       setMsg({ type: "error", text: err.message || "Error al solicitar el préstamo." });
@@ -286,6 +295,47 @@ function LibroDetalle() {
             </div>
           )}
         </div>
+
+        {/* Receipt Modal */}
+        {receiptData && (
+          <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.55)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000 }}
+               onClick={() => setReceiptData(null)}>
+            <div style={{ background: "#fff", borderRadius: "12px", padding: "32px", width: "480px", maxWidth: "95vw", boxShadow: "0 20px 60px rgba(0,0,0,0.3)", position: "relative" }}
+                 onClick={e => e.stopPropagation()}>
+              <button onClick={() => setReceiptData(null)}
+                style={{ position: "absolute", top: "12px", right: "14px", background: "none", border: "none", fontSize: "1.3rem", cursor: "pointer", color: "#999" }}>✕</button>
+
+              <div style={{ textAlign: "center", marginBottom: "20px" }}>
+                <div style={{ fontSize: "2.5rem" }}>📋</div>
+                <h2 style={{ margin: "8px 0 4px", color: "#2e7d32", fontSize: "1.15rem", fontWeight: 700 }}>Préstamo Registrado</h2>
+                <p style={{ color: "#666", fontSize: "0.85rem" }}>Boleta de Préstamo Bibliotecario</p>
+              </div>
+
+              <div style={{ background: "#f9f9f9", borderRadius: "8px", padding: "16px", fontSize: "0.88rem", lineHeight: "1.9" }}>
+                <div><strong>Folio:</strong> #{receiptData.loan_id}</div>
+                <div><strong>Recurso:</strong> {receiptData.titulo}</div>
+                {receiptData.autor && <div><strong>Autor:</strong> {receiptData.autor}</div>}
+                <div><strong>Código de barras:</strong> {receiptData.barcode}</div>
+                {receiptData.ubicacion && <div><strong>Ubicación:</strong> {receiptData.ubicacion}</div>}
+                <div><strong>Fecha de préstamo:</strong> {new Date(receiptData.initial_lent_at).toLocaleDateString("es-MX", { day:"2-digit", month:"long", year:"numeric" })}</div>
+                {receiptData.due_date && (
+                  <div style={{ color: "#b71c1c", fontWeight: 600 }}>
+                    <strong>Fecha límite de devolución:</strong> {new Date(receiptData.due_date).toLocaleDateString("es-MX", { day:"2-digit", month:"long", year:"numeric" })}
+                  </div>
+                )}
+              </div>
+
+              <div style={{ background: "#fff8e1", border: "1px solid #ffe082", borderRadius: "6px", padding: "10px 14px", marginTop: "16px", fontSize: "0.82rem", color: "#795548" }}>
+                ⚠️ {receiptData.instrucciones}
+              </div>
+
+              <button onClick={() => setReceiptData(null)}
+                style={{ display: "block", width: "100%", marginTop: "20px", padding: "11px", background: "#2e7d32", color: "#fff", border: "none", borderRadius: "7px", fontWeight: 700, fontSize: "0.95rem", cursor: "pointer" }}>
+                Entendido
+              </button>
+            </div>
+          </div>
+        )}
 
         {/* Modal Editar — dentro de main-content para que el z-index funcione */}
         {modalEditarAbierto && recursoEditando && (

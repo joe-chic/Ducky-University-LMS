@@ -132,63 +132,153 @@ app.put("/api/resources/:id/examples/:barcode", (req, res) => proxyResource(req,
 app.delete("/api/resources/:id/examples/:barcode", (req, res) => proxyResource(req, res, `/resources/${req.params.id}/examples/${req.params.barcode}`));
 
 
+// Helper: add N business days
+function addBusinessDays(date, days) {
+  const result = new Date(date);
+  let added = 0;
+  while (added < days) {
+    result.setDate(result.getDate() + 1);
+    const dow = result.getDay();
+    if (dow !== 0 && dow !== 6) added++;
+  }
+  return result;
+}
+
 // LOANS
 app.get("/api/loans", (req, res) => proxyResource(req, res, "/loans"));
+app.get("/api/loans/receipt/:id", (req, res) => proxyResource(req, res, `/loans/receipt/${req.params.id}`));
+
+// POST /api/loans  — Full validated loan creation
 app.post("/api/loans", async (req, res) => {
   try {
-    const { campus_id } = req.body;
-    if (!campus_id) return res.status(400).json({ message: "campus_id es requerido" });
+    const { campus_id, barcode } = req.body;
+    if (!campus_id || !barcode)
+      return res.status(400).json({ message: "campus_id y barcode son requeridos." });
 
-    // 1. Verificar que el usuario existe y está activo
     const token = req.headers.authorization;
+    const headers = token ? { Authorization: token } : {};
+
+    // ── Step 1: Verify user exists and is active ──
     const userRes = await axios.get(`${USERS_BASE_URL}/users/${campus_id}/by-campus`, {
-      headers: token ? { Authorization: token } : undefined,
-      timeout: 10_000,
+      headers, timeout: 10_000,
     }).catch(err => {
-      const status = err?.response?.status;
-      if (status === 404) throw new Error("El usuario no existe en el sistema.");
+      const s = err?.response?.status;
+      if (s === 404) throw new Error("El usuario no existe en el sistema.");
       throw new Error("No se pudo verificar el usuario.");
     });
-
     const user = userRes.data;
     if (user.user_state !== "active") {
-      return res.status(403).json({ message: `El usuario está ${user.user_state === "blocked" ? "bloqueado" : "deshabilitado"} y no puede solicitar préstamos.` });
+      return res.status(403).json({
+        message: `Tu cuenta está ${user.user_state === "blocked" ? "bloqueada" : "deshabilitada"} y no puede solicitar préstamos.`
+      });
     }
 
-    // 2. Verificar que no tenga multas sin pagar
+    // ── Step 2: Verify no unpaid fines in treasury ──
     const finesRes = await axios.get(`${TREASURY_BASE_URL}/fines`, {
-      params: { campus_id, status: "unpaid" },
-      timeout: 10_000,
+      params: { campus_id, status: "unpaid" }, timeout: 10_000,
     }).catch(() => ({ data: [] }));
-
     const unpaidFines = Array.isArray(finesRes.data) ? finesRes.data : [];
     if (unpaidFines.length > 0) {
-      return res.status(403).json({ message: `El usuario tiene ${unpaidFines.length} multa(s) sin pagar. Debe liquidarlas antes de solicitar un préstamo.` });
+      return res.status(403).json({
+        message: `Tienes ${unpaidFines.length} multa(s) sin pagar (total: $${unpaidFines.reduce((s, f) => s + parseFloat(f.price), 0).toFixed(2)} MXN). Deberás liquidarlas antes de solicitar un préstamo.`
+      });
     }
 
-    // 3. Verificar que no tenga más de 2 préstamos activos
-    const activeLoansRes = await axios.get(`${LIBRARY_BASE_URL}/loans`, {
-      params: { campus_id, state: "active" },
-      timeout: 10_000,
+    // ── Step 3: Verify ≤2 active physical loans ──
+    const activeRes = await axios.get(`${LIBRARY_BASE_URL}/loans`, {
+      params: { campus_id, state: "active" }, timeout: 10_000,
     }).catch(() => ({ data: [] }));
-
-    const activeLoans = Array.isArray(activeLoansRes.data) ? activeLoansRes.data : [];
+    const activeLoans = Array.isArray(activeRes.data) ? activeRes.data : [];
     if (activeLoans.length >= 2) {
-      return res.status(403).json({ message: `El usuario ya tiene ${activeLoans.length} préstamo(s) activo(s). El máximo permitido es 2.` });
+      return res.status(403).json({
+        message: `Ya tienes ${activeLoans.length} préstamo(s) activo(s). El máximo permitido es 2. Devólvelos antes de solicitar otro.`
+      });
     }
 
-    // 3. Crear el préstamo
-    const loanRes = await axios.post(`${LIBRARY_BASE_URL}/loans`, req.body, {
-      headers: { "Content-Type": "application/json" },
-      timeout: 10_000,
+    // ── Step 4: Verify the specific exemplar is available ──
+    // (the library microservice checks this atomically inside its transaction)
+
+    // ── Step 5: Create the loan ──
+    const loanRes = await axios.post(`${LIBRARY_BASE_URL}/loans`,
+      { barcode, campus_id },
+      { headers: { "Content-Type": "application/json" }, timeout: 10_000 }
+    ).catch(err => {
+      const bodyMsg = err?.response?.data?.message || err?.response?.data?.error;
+      const s = err?.response?.status;
+      if (s === 404) throw Object.assign(new Error(bodyMsg || `El código de barras '${barcode}' no existe en el catálogo.`), { statusCode: 404 });
+      if (s === 409) throw Object.assign(new Error(bodyMsg || `El ejemplar '${barcode}' ya no está disponible (está en préstamo o reservado).`), { statusCode: 409 });
+      throw Object.assign(new Error(bodyMsg || "Error al registrar el préstamo en biblioteca."), { statusCode: s || 500 });
     });
-    res.json(loanRes.data);
+    const { loan_id } = loanRes.data;
+
+    // ── Step 6: Fetch full receipt ──
+    const receiptRes = await axios.get(`${LIBRARY_BASE_URL}/loans/receipt/${loan_id}`, {
+      timeout: 10_000,
+    }).catch(() => ({ data: null }));
+    const receipt = receiptRes.data;
+
+    // ── Step 7: Build due_date ──
+    const lentAt  = receipt ? new Date(receipt.initial_lent_at) : new Date();
+    const dueDate = addBusinessDays(lentAt, 5);
+
+    res.status(201).json({
+      ok: true,
+      loan_id,
+      message: "\u2713 Pr\u00e9stamo registrado con \u00e9xito.",
+      boleta: {
+        loan_id,
+        campus_id,
+        titulo:        receipt?.titulo    || "(recurso)",
+        autor:         receipt?.autor     || "",
+        barcode:       receipt?.barcode   || barcode,
+        ubicacion:     receipt?.ubicacion || "",
+        initial_lent_at: lentAt,
+        due_date:      dueDate,
+        loan_state:    "active",
+        instrucciones: "Devólvelo en biblioteca en un máximo de 5 d\u00edas h\u00e1biles. Despu\u00e9s de esa fecha se aplica una multa de $5.00 MXN por d\u00eda h\u00e1bil.",
+      },
+    });
   } catch (err) {
-    const status = err?.response?.status || 500;
-    res.status(status).json({ message: err?.message || err?.response?.data?.message || "Error al crear el préstamo" });
+    // Always prefer a descriptive message — never leak raw axios error strings like "Request failed with status code 404"
+    const status = err?.statusCode || err?.response?.status || 500;
+    const message = err?.message || err?.response?.data?.message || err?.response?.data?.error || "Error al crear el préstamo.";
+    res.status(status).json({ message });
   }
 });
-app.put("/api/loans/:id/return", (req, res) => proxyResource(req, res, `/loans/${req.params.id}/return`));
+
+// PUT /api/loans/:id/return  — return loan + auto-create fine if overdue
+app.put("/api/loans/:id/return", async (req, res) => {
+  try {
+    const returnRes = await axios.put(`${LIBRARY_BASE_URL}/loans/${req.params.id}/return`, {}, {
+      timeout: 10_000,
+    });
+    const data = returnRes.data;
+
+    // If overdue: register a fine in treasury (fire-and-keep-response)
+    if (data.fine_amount > 0) {
+      axios.post(`${TREASURY_BASE_URL}/fines`, {
+        price:                data.fine_amount,
+        reason_code_id:      1,   // LR-001 late_return
+        source_system:       "library",
+        source_transaction_id: `loan-${data.loan_id}`,
+        offender_id:         data.campus_id,
+        offender_type:       "student",
+      }, { timeout: 10_000 }).catch(e =>
+        console.warn("[bff] treasury fine registration failed:", e.message)
+      );
+
+      return res.json({
+        ...data,
+        message: `Se registró una multa de $${data.fine_amount} MXN por ${data.overdue_days} día(s) de retraso. Paga en tesoría antes de tu próximo préstamo.`,
+      });
+    }
+
+    res.json({ ...data, message: "Libro devuelto correctamente. ¡Gracias!" });
+  } catch (err) {
+    const status = err?.response?.status || 500;
+    res.status(status).json({ message: err?.response?.data?.message || "Error al registrar la devolución." });
+  }
+});
 
 
 // TREASURY proxy
