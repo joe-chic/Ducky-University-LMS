@@ -30,6 +30,7 @@ function resourceRowToDto(row) {
     ano_publicacion: row.ano_publicacion,
     costo: row.costo,
     isbn: row.isbn,
+    issn: row.self_issn || null,
     edicion: row.edicion,
     sinopsis: row.sinopsis,
     lenguajes: row.lenguajes,
@@ -222,7 +223,8 @@ app.get("/resources/:id", async (req, res) => {
           pm.peer_reviewed        AS journal_peer_reviewed,
           da.digital_article_issue  AS article_issue,
           da.digital_article_volume AS article_volume,
-          da.digital_article_year   AS article_year
+          da.digital_article_year   AS article_year,
+          pm_self.periodical_issn   AS self_issn
        FROM resources r
        LEFT JOIN collaborators c ON c.colaborator_id = r.author_principal_id
        LEFT JOIN organizations o ON o.organization_id = r.publisher_id
@@ -235,13 +237,15 @@ app.get("/resources/:id", async (req, res) => {
        LEFT JOIN digital_articles da ON da.resource_child_id = r.resource_id
        LEFT JOIN resources rj ON rj.resource_id = da.resource_parent_id
        LEFT JOIN periodical_metadata pm ON pm.resource_id = da.resource_parent_id
+       LEFT JOIN periodical_metadata pm_self ON pm_self.resource_id = r.resource_id
        WHERE r.resource_id = $1
        GROUP BY r.resource_id, c.first_name, c.middle_name, c.father_lastname, c.mother_lastname,
                 c.colaborator_id, o.organization_name, o.organization_id, r.resource_state,
                 r.resource_type, r.resource_publication_year, r.resource_cost, bm.book_isbn,
                 bm.book_edition_number, bm.book_synopsis, da.resource_parent_id, rj.resource_title,
                 pm.periodical_issn, pm.periodical_frequency, pm.peer_reviewed,
-                da.digital_article_issue, da.digital_article_volume, da.digital_article_year`,
+                da.digital_article_issue, da.digital_article_volume, da.digital_article_year,
+                pm_self.periodical_issn`,
       [id]
     );
 
@@ -859,9 +863,9 @@ app.get("/digital-loans", async (req, res) => {
     await autoExpireDigitalLoans(null);
     const { campus_id, resource_id, state } = req.query;
     const params = []; const where = [];
-    if (campus_id)   { params.push(Number(campus_id));   where.push(`dl.campus_id = ${params.length}`); }
-    if (resource_id) { params.push(Number(resource_id)); where.push(`dl.resource_id = ${params.length}`); }
-    if (state)       { params.push(state);               where.push(`dl.digital_loan_state = ${params.length}`); }
+    if (campus_id)   { params.push(Number(campus_id));   where.push(`dl.campus_id = $${params.length}`); }
+    if (resource_id) { params.push(Number(resource_id)); where.push(`dl.resource_id = $${params.length}`); }
+    if (state)       { params.push(state);               where.push(`dl.digital_loan_state = $${params.length}`); }
     const whereSql = where.length ? `WHERE ${where.join(" AND ")}` : "";
     const r = await query(
       `SELECT dl.digital_loan_id, dl.resource_id, dl.campus_id, dl.initial_lent_at,

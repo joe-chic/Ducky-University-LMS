@@ -28,8 +28,8 @@ function MisPrestamos() {
     setLoading(true);
     try {
       const token = getToken();
-      const data = await bffGet("/api/loans", { token, params: { campus_id: campusId } });
-      setPrestamos(Array.isArray(data) ? data : []);
+      const data = await bffGet("/api/all-loans", { token, params: { campus_id: campusId } });
+      setPrestamos(Array.isArray(data?.items) ? data.items : []);
     } catch {
       setPrestamos([]);
     } finally {
@@ -50,8 +50,8 @@ function MisPrestamos() {
     }
   };
 
-  const activos = prestamos.filter(p => p.loan_state === "active" || p.loan_state === "overdue");
-  const historial = prestamos.filter(p => p.loan_state === "completed");
+  const activos = prestamos.filter(p => p.state === "active" || p.state === "overdue");
+  const historial = prestamos.filter(p => p.state === "completed");
 
   function formatDate(d) {
     if (!d) return "—";
@@ -95,12 +95,15 @@ function MisPrestamos() {
               {activos.map(p => (
                 <div key={p.loan_id} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", background: "#fff", border: "1px solid #e0e0e0", borderRadius: "8px", padding: "16px 20px", flexWrap: "wrap", gap: "12px" }}>
                   <div style={{ flex: 1 }}>
-                    <p style={{ fontWeight: "bold", fontSize: "0.95rem", marginBottom: "3px" }}>{p.titulo}</p>
-                    <p style={{ color: "#666", fontSize: "0.82rem" }}>Barcode: {p.barcode}</p>
+                    <p style={{ fontWeight: "bold", fontSize: "0.95rem", marginBottom: "3px" }}>
+                      {p.titulo} {p.loan_type === "digital" && " (Digital)"}
+                    </p>
+                    {p.loan_type === "physical" && <p style={{ color: "#666", fontSize: "0.82rem" }}>Barcode: {p.barcode}</p>}
+                    {p.journal_title && <p style={{ color: "#7b1fa2", fontSize: "0.82rem" }}>Revista: {p.journal_title}</p>}
                     <p style={{ color: "#666", fontSize: "0.82rem" }}>Prestado el: {formatDate(p.initial_lent_at)}</p>
                   </div>
-                  <span style={{ padding: "4px 12px", borderRadius: "20px", fontSize: "0.78rem", fontWeight: "bold", ...badgeStyle(p.loan_state) }}>
-                    {badgeLabel(p.loan_state)}
+                  <span style={{ padding: "4px 12px", borderRadius: "20px", fontSize: "0.78rem", fontWeight: "bold", ...badgeStyle(p.state) }}>
+                    {badgeLabel(p.state)}
                   </span>
                 </div>
               ))}
@@ -124,8 +127,8 @@ function MisPrestamos() {
                     <p style={{ color: "#999", fontSize: "0.82rem" }}>Prestado: {formatDate(p.initial_lent_at)}</p>
                     <p style={{ color: "#999", fontSize: "0.82rem" }}>Devuelto: {formatDate(p.returned_at)}</p>
                   </div>
-                  <span style={{ padding: "4px 12px", borderRadius: "20px", fontSize: "0.78rem", fontWeight: "bold", ...badgeStyle(p.loan_state) }}>
-                    {badgeLabel(p.loan_state)}
+                  <span style={{ padding: "4px 12px", borderRadius: "20px", fontSize: "0.78rem", fontWeight: "bold", ...badgeStyle(p.state) }}>
+                    {badgeLabel(p.state)}
                   </span>
                 </div>
               ))}

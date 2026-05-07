@@ -433,10 +433,12 @@ function LibroDetalle() {
                       <span className="libro-dato-label">Tipo</span>
                       <span className="libro-dato-valor" style={{ textTransform: "capitalize" }}>{libro.tipo?.replace(/_/g, " ")}</span>
                     </div>
-                    <div className="libro-dato">
-                      <span className="libro-dato-label">ISBN</span>
-                      <span className="libro-dato-valor">{libro.isbn || "N/A"}</span>
-                    </div>
+                    {libro.tipo !== "digital_article" && (
+                      <div className="libro-dato">
+                        <span className="libro-dato-label">{libro.tipo === "e_journal" ? "ISSN" : "ISBN"}</span>
+                        <span className="libro-dato-valor">{libro.tipo === "e_journal" ? (libro.issn || "N/A") : (libro.isbn || "N/A")}</span>
+                      </div>
+                    )}
                     <div className="libro-dato">
                       <span className="libro-dato-label">Editorial</span>
                       <span className="libro-dato-valor">{libro.editorial || "N/A"}</span>
@@ -445,10 +447,12 @@ function LibroDetalle() {
                       <span className="libro-dato-label">Año</span>
                       <span className="libro-dato-valor">{libro.ano_publicacion || "N/A"}</span>
                     </div>
-                    <div className="libro-dato">
-                      <span className="libro-dato-label">Edición</span>
-                      <span className="libro-dato-valor">{libro.edicion ? `${libro.edicion}ra edición` : "N/A"}</span>
-                    </div>
+                    {libro.tipo !== "digital_article" && libro.tipo !== "e_journal" && (
+                      <div className="libro-dato">
+                        <span className="libro-dato-label">Edición</span>
+                        <span className="libro-dato-valor">{libro.edicion ? `${libro.edicion}ra edición` : "N/A"}</span>
+                      </div>
+                    )}
                     <div className="libro-dato">
                       <span className="libro-dato-label">Estado</span>
                       <span className="libro-dato-valor" style={{ color: libro.disponible ? "#2e7d32" : "#c62828", fontWeight: "bold" }}>
@@ -538,8 +542,8 @@ function LibroDetalle() {
                     <div style={{ background: "linear-gradient(135deg,#f3e5f5,#e8eaf6)", border: "1px solid #ce93d8", borderRadius: "10px", padding: "14px 16px", marginBottom: "12px" }}>
                       <div style={{ fontSize: "0.72rem", color: "#7b1fa2", fontWeight: 700, letterSpacing: "0.06em", marginBottom: "4px" }}>📰 REVISTA / JOURNAL</div>
                       <a
-                        href={`/recursos/${libro.journal_id}`}
-                        onClick={e => { e.preventDefault(); navigate(`/recursos/${libro.journal_id}`); }}
+                        href={`/libros/${libro.journal_id}`}
+                        onClick={e => { e.preventDefault(); navigate(`/libros/${libro.journal_id}`); }}
                         style={{ fontWeight: 700, fontSize: "1rem", color: "#4a148c", textDecoration: "none", borderBottom: "2px solid #ce93d8" }}
                       >
                         {libro.journal_title}
