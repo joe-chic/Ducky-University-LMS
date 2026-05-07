@@ -257,7 +257,7 @@ function Libros() {
                         {recurso.disponible ? "Disponible" : "No disponible"}
                       </span>
 
-                      {isAlumno && recurso.disponible && (
+                      {isAlumno && recurso.disponible && ["e_book", "digital_article"].includes(recurso.tipo) && (
                         <button className="btn-action" onClick={e => handleSolicitarPrestamo(recurso, e)} disabled={loadingPrestamo}>
                           Solicitar Préstamo
                         </button>

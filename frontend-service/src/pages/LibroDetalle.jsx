@@ -135,7 +135,11 @@ function LibroDetalle() {
   };
 
   const disponibles = ejemplares.filter(e => e.example_op_state === "available").length;
-  const enPrestamo = ejemplares.filter(e => e.example_op_state === "on loan").length;
+  const enPrestamo  = ejemplares.filter(e => e.example_op_state === "on loan").length;
+
+  // Only digital resources (e-books and digital articles) can be requested online.
+  // Physical books must be borrowed in person through the librarian.
+  const isDigital = libro => ["e_book", "digital_article"].includes(libro?.tipo);
 
   return (
     <div className="home-container">
@@ -254,13 +258,18 @@ function LibroDetalle() {
               <hr className="libro-divider" />
 
               <div className="libro-acciones">
-                {isAlumno && libro.disponible && (
+                {isAlumno && isDigital(libro) && libro.disponible && (
                   <button className="libro-btn-prestamo" onClick={handleSolicitarPrestamo} disabled={loadingPrestamo}>
                     {loadingPrestamo ? "Procesando..." : "Solicitar Préstamo"}
                   </button>
                 )}
-                {isAlumno && !libro.disponible && (
+                {isAlumno && isDigital(libro) && !libro.disponible && (
                   <p style={{ color: "#c62828", fontWeight: 600 }}>No disponible para préstamo en este momento.</p>
+                )}
+                {isAlumno && !isDigital(libro) && (
+                  <p style={{ color: "#795548", fontWeight: 500, fontSize: "0.9rem", background: "#fff8e1", border: "1px solid #ffe082", borderRadius: "6px", padding: "10px 14px" }}>
+                    📚 Para solicitar este recurso físico, preséntate en persona en la biblioteca. El personal registrará el préstamo.
+                  </p>
                 )}
                 {hasManagementRole && (
                   <>
