@@ -1,0 +1,446 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Ducky Scholar — Admin Portal</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet"/>
+  <style>
+    :root {
+      --bg: #0f1117;
+      --surface: #1a1d27;
+      --surface2: #232639;
+      --border: #2e3250;
+      --accent: #6c8cff;
+      --accent2: #a78bfa;
+      --green: #34d399;
+      --red: #f87171;
+      --yellow: #fbbf24;
+      --text: #e2e8f0;
+      --muted: #8892b0;
+      --radius: 10px;
+    }
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: 'Inter', sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; }
+
+    /* ── Header ── */
+    header {
+      background: linear-gradient(135deg, #1e2a78 0%, #6c8cff 100%);
+      padding: 18px 32px;
+      display: flex; align-items: center; gap: 16px;
+      box-shadow: 0 4px 24px rgba(108,140,255,.25);
+    }
+    header .logo { font-size: 26px; }
+    header h1 { font-size: 1.35rem; font-weight: 700; letter-spacing: -0.5px; }
+    header p  { font-size: .78rem; color: rgba(255,255,255,.7); margin-top: 2px; }
+
+    /* ── Layout ── */
+    .layout { display: flex; height: calc(100vh - 72px); }
+    nav {
+      width: 220px; background: var(--surface); border-right: 1px solid var(--border);
+      padding: 24px 0; display: flex; flex-direction: column; gap: 4px; flex-shrink: 0;
+    }
+    nav button {
+      background: none; border: none; color: var(--muted); text-align: left;
+      padding: 10px 20px; font-size: .88rem; font-weight: 500; cursor: pointer;
+      border-left: 3px solid transparent; transition: all .2s; font-family: 'Inter', sans-serif;
+    }
+    nav button:hover { color: var(--text); background: var(--surface2); }
+    nav button.active { color: var(--accent); border-left-color: var(--accent); background: rgba(108,140,255,.08); }
+    nav .section-label { color: var(--muted); font-size: .7rem; font-weight: 600; padding: 16px 20px 4px; letter-spacing: .08em; text-transform: uppercase; }
+
+    main { flex: 1; overflow-y: auto; padding: 28px 32px; }
+
+    /* ── Panel header ── */
+    .panel-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 22px; }
+    .panel-header h2 { font-size: 1.15rem; font-weight: 600; }
+    .panel-header .meta { color: var(--muted); font-size: .82rem; margin-top: 3px; }
+
+    /* ── Buttons ── */
+    .btn { padding: 8px 16px; border-radius: 7px; font-size: .83rem; font-weight: 600; cursor: pointer; border: none; font-family: 'Inter', sans-serif; transition: all .15s; }
+    .btn-primary { background: var(--accent); color: #fff; }
+    .btn-primary:hover { background: #4f6fef; transform: translateY(-1px); }
+    .btn-danger  { background: rgba(248,113,113,.15); color: var(--red); border: 1px solid rgba(248,113,113,.3); }
+    .btn-danger:hover { background: rgba(248,113,113,.25); }
+    .btn-edit    { background: rgba(108,140,255,.12); color: var(--accent); border: 1px solid rgba(108,140,255,.25); }
+    .btn-edit:hover { background: rgba(108,140,255,.22); }
+    .btn-sm { padding: 5px 10px; font-size: .77rem; }
+
+    /* ── Table ── */
+    .table-wrap { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; }
+    table { width: 100%; border-collapse: collapse; font-size: .84rem; }
+    thead th { background: var(--surface2); color: var(--muted); font-weight: 600; font-size: .75rem; text-transform: uppercase; letter-spacing: .06em; padding: 12px 16px; text-align: left; border-bottom: 1px solid var(--border); }
+    tbody tr { border-bottom: 1px solid var(--border); transition: background .15s; }
+    tbody tr:last-child { border-bottom: none; }
+    tbody tr:hover { background: rgba(108,140,255,.04); }
+    td { padding: 11px 16px; vertical-align: middle; }
+    .actions { display: flex; gap: 6px; }
+
+    /* ── Badges ── */
+    .badge { display: inline-block; padding: 3px 9px; border-radius: 20px; font-size: .72rem; font-weight: 600; }
+    .badge-green  { background: rgba(52,211,153,.15); color: var(--green); }
+    .badge-red    { background: rgba(248,113,113,.15); color: var(--red); }
+    .badge-yellow { background: rgba(251,191,36,.15);  color: var(--yellow); }
+    .badge-muted  { background: rgba(136,146,176,.15); color: var(--muted); }
+
+    /* ── Pagination ── */
+    .pagination { display: flex; align-items: center; gap: 10px; margin-top: 20px; justify-content: flex-end; }
+    .pagination button { background: var(--surface); border: 1px solid var(--border); color: var(--text); padding: 7px 14px; border-radius: 7px; cursor: pointer; font-size: .83rem; font-family: 'Inter', sans-serif; transition: all .15s; }
+    .pagination button:hover:not(:disabled) { background: var(--surface2); border-color: var(--accent); }
+    .pagination button:disabled { opacity: .35; cursor: not-allowed; }
+    .pagination .page-info { color: var(--muted); font-size: .82rem; }
+
+    /* ── Modal ── */
+    .overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,.65); backdrop-filter: blur(3px); z-index: 100; align-items: center; justify-content: center; }
+    .overlay.open { display: flex; }
+    .modal { background: var(--surface); border: 1px solid var(--border); border-radius: 14px; padding: 28px; width: 520px; max-width: 95vw; max-height: 90vh; overflow-y: auto; box-shadow: 0 24px 80px rgba(0,0,0,.5); }
+    .modal h3 { font-size: 1.05rem; font-weight: 700; margin-bottom: 20px; }
+    .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+    .form-grid .full { grid-column: 1 / -1; }
+    label { font-size: .78rem; color: var(--muted); font-weight: 500; display: block; margin-bottom: 5px; }
+    input, select, textarea {
+      width: 100%; background: var(--surface2); border: 1px solid var(--border); color: var(--text);
+      padding: 8px 12px; border-radius: 7px; font-size: .85rem; font-family: 'Inter', sans-serif;
+      outline: none; transition: border .2s;
+    }
+    input:focus, select:focus, textarea:focus { border-color: var(--accent); }
+    textarea { resize: vertical; min-height: 70px; }
+    .modal-footer { display: flex; gap: 10px; justify-content: flex-end; margin-top: 22px; }
+
+    /* ── Empty / Error state ── */
+    .state-box { text-align: center; padding: 60px 20px; color: var(--muted); }
+    .state-box .icon { font-size: 3rem; margin-bottom: 12px; }
+    .state-box p { font-size: .92rem; }
+
+    /* ── Toast ── */
+    #toast { position: fixed; bottom: 28px; right: 28px; background: var(--surface2); border: 1px solid var(--border); padding: 12px 20px; border-radius: 10px; font-size: .85rem; z-index: 999; opacity: 0; transform: translateY(10px); transition: all .3s; pointer-events: none; }
+    #toast.show { opacity: 1; transform: translateY(0); }
+    #toast.success { border-color: var(--green); color: var(--green); }
+    #toast.error   { border-color: var(--red);   color: var(--red); }
+  </style>
+</head>
+<body>
+
+<header>
+  <div class="logo">🎓</div>
+  <div>
+    <h1>Ducky Scholar — Admin Portal</h1>
+    <p>Manage academic records · No authentication required</p>
+  </div>
+</header>
+
+<div class="layout">
+  <nav id="nav">
+    <div class="section-label">Academic</div>
+    <button onclick="switchTable('students')"      class="active">Students</button>
+    <button onclick="switchTable('subjects')">Subjects</button>
+    <button onclick="switchTable('departments')">Departments</button>
+    <div class="section-label">Scheduling</div>
+    <button onclick="switchTable('locations')">Classroom Locations</button>
+    <button onclick="switchTable('availabilities')">Subject Sections</button>
+    <button onclick="switchTable('enrollments')">Enrollments</button>
+  </nav>
+
+  <main>
+    <div class="panel-header">
+      <div>
+        <h2 id="panel-title">Students</h2>
+        <div class="meta" id="panel-meta">Loading…</div>
+      </div>
+      <button class="btn btn-primary" onclick="openAdd()">＋ Add Record</button>
+    </div>
+
+    <div class="table-wrap">
+      <table>
+        <thead id="thead"><tr></tr></thead>
+        <tbody id="tbody"><tr><td colspan="10"><div class="state-box"><div class="icon">⏳</div><p>Loading…</p></div></td></tr></tbody>
+      </table>
+    </div>
+
+    <div class="pagination">
+      <button id="btn-prev" onclick="changePage(-1)" disabled>← Prev</button>
+      <span class="page-info" id="page-info">Page 1</span>
+      <button id="btn-next" onclick="changePage(1)">Next →</button>
+    </div>
+  </main>
+</div>
+
+<!-- Modal -->
+<div class="overlay" id="overlay">
+  <div class="modal">
+    <h3 id="modal-title">Add Record</h3>
+    <form id="modal-form" class="form-grid" onsubmit="submitForm(event)"></form>
+    <div class="modal-footer">
+      <button class="btn" style="background:var(--surface2);border:1px solid var(--border)" onclick="closeModal()" type="button">Cancel</button>
+      <button class="btn btn-primary" type="submit" form="modal-form">Save</button>
+    </div>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<script>
+const BFF = 'http://localhost:4001';
+let currentTable = 'students';
+let currentPage  = 1;
+let totalPages   = 1;
+let editingId    = null;
+let editingId2   = null; // for composite keys
+
+// ─── Table configs ───────────────────────────────────────────────────────────
+const TABLES = {
+  students: {
+    label: 'Students', endpoint: '/api/students', idKey: 'student_id',
+    cols: ['student_id','first_name','middle_name','father_lastname','student_email','student_status','student_phone','created_at'],
+    headers: ['ID','First Name','Middle','Last Name','Email','Status','Phone','Created'],
+    badge: { key: 'student_status', map: { active:'green', inactive:'muted', graduated:'green', suspended:'red' } },
+    fields: [
+      { name:'first_name',      label:'First Name',   type:'text', required:true },
+      { name:'middle_name',     label:'Middle Name',  type:'text' },
+      { name:'father_lastname', label:'Last Name',    type:'text', required:true },
+      { name:'mother_lastname', label:'Mother Name',  type:'text' },
+      { name:'student_email',   label:'Email',        type:'email', required:true, full:true },
+      { name:'student_phone',   label:'Phone',        type:'text', required:true },
+      { name:'student_status',  label:'Status',       type:'select', required:true, options:['active','inactive','graduated','suspended'] },
+    ],
+  },
+  subjects: {
+    label: 'Subjects', endpoint: '/api/subjects', idKey: 'subject_id',
+    cols: ['subject_id','subject_name','department_name','credits','status','subject_is_elective'],
+    headers: ['ID','Name','Department','Credits','Status','Elective'],
+    badge: { key: 'status', map: { active:'green', inactive:'muted', archived:'yellow', cancelled:'red' } },
+    fields: [
+      { name:'subject_name',        label:'Subject Name',  type:'text', required:true, full:true },
+      { name:'subject_description', label:'Description',   type:'textarea', required:true, full:true },
+      { name:'department_id',       label:'Dept ID',       type:'number', required:true },
+      { name:'credits',             label:'Credits',       type:'number', required:true },
+      { name:'status',              label:'Status',        type:'select', required:true, options:['active','inactive','archived','cancelled'] },
+      { name:'subject_is_elective', label:'Elective',      type:'select', required:true, options:['true','false'] },
+    ],
+  },
+  departments: {
+    label: 'Departments', endpoint: '/api/departments', idKey: 'department_id',
+    cols: ['department_id','department_name','department_head_id'],
+    headers: ['ID','Name','Head Employee ID'],
+    badge: null,
+    fields: [
+      { name:'department_name',    label:'Department Name', type:'text', required:true, full:true },
+      { name:'department_head_id', label:'Head Employee ID',type:'number', required:true, full:true },
+    ],
+  },
+  locations: {
+    label: 'Classroom Locations', endpoint: '/api/locations', idKey: 'location_id',
+    cols: ['location_id','location_building_name','location_floor','location_room_number'],
+    headers: ['ID','Building','Floor','Room'],
+    badge: null,
+    fields: [
+      { name:'location_building_name', label:'Building', type:'text',   required:true, full:true },
+      { name:'location_floor',         label:'Floor',    type:'number', required:true },
+      { name:'location_room_number',   label:'Room #',   type:'number', required:true },
+    ],
+  },
+  availabilities: {
+    label: 'Subject Sections', endpoint: '/api/availabilities', idKey: 'availability_id',
+    cols: ['availability_id','subject_name','location_building_name','professor_id','availability_status','attendance_mode','current_enrollment'],
+    headers: ['ID','Subject','Location','Prof. ID','Status','Mode','Enrolling'],
+    badge: { key: 'availability_status', map: { open:'green', closed:'muted', full:'yellow', cancelled:'red' } },
+    fields: [
+      { name:'subject_id',          label:'Subject ID',   type:'number', required:true },
+      { name:'location_id',         label:'Location ID',  type:'number', required:true },
+      { name:'professor_id',        label:'Professor ID', type:'number', required:true },
+      { name:'availability_status', label:'Status',       type:'select', required:true, options:['open','closed','full','cancelled'] },
+      { name:'attendance_mode',     label:'Mode',         type:'select', required:true, options:['presential','online','hybrid'] },
+      { name:'current_enrollment',  label:'Open Enrollment', type:'select', required:true, options:['true','false'] },
+      { name:'class_start_at',      label:'Class Start',  type:'datetime-local', required:true },
+      { name:'class_end_at',        label:'Class End',    type:'datetime-local', required:true },
+      { name:'subject_start_at',    label:'Subj. Start',  type:'datetime-local', required:true },
+      { name:'subject_end_at',      label:'Subj. End',    type:'datetime-local', required:true },
+    ],
+  },
+  enrollments: {
+    label: 'Enrollments', endpoint: '/api/enrollments', idKey: null,
+    cols: ['student_id','availability_id','student_name','subject_name','enrollment_status','subject_final_score'],
+    headers: ['Student ID','Section ID','Student','Subject','Status','Final Score'],
+    badge: { key: 'enrollment_status', map: { enrolled:'green', pending:'yellow', approved:'green', rejected:'red', dropped:'muted', failed:'red' } },
+    compositeKey: ['student_id','availability_id'],
+    fields: [
+      { name:'student_id',       label:'Student ID',    type:'number', required:true },
+      { name:'availability_id',  label:'Section ID',    type:'number', required:true },
+      { name:'enrollment_status',label:'Status',        type:'select', required:true, options:['enrolled','pending','approved','rejected','dropped','failed'] },
+      { name:'subject_final_score', label:'Final Score',type:'number' },
+    ],
+  },
+};
+
+// ─── Core logic ──────────────────────────────────────────────────────────────
+function switchTable(name) {
+  currentTable = name;
+  currentPage  = 1;
+  editingId    = null;
+  // update nav
+  document.querySelectorAll('nav button').forEach(b => b.classList.remove('active'));
+  event.target.classList.add('active');
+  document.getElementById('panel-title').textContent = TABLES[name].label;
+  loadData();
+}
+
+async function loadData() {
+  const cfg = TABLES[currentTable];
+  document.getElementById('panel-meta').textContent = 'Loading…';
+  try {
+    const r = await fetch(`${BFF}${cfg.endpoint}?page=${currentPage}`);
+    const d = await r.json();
+    if (d.error) throw new Error(d.error);
+    renderTable(cfg, d.items || []);
+    totalPages = d.pages || 1;
+    document.getElementById('page-info').textContent = `Page ${d.page} of ${d.pages} · ${d.total} records`;
+    document.getElementById('panel-meta').textContent = `${d.total} total records`;
+    document.getElementById('btn-prev').disabled = currentPage <= 1;
+    document.getElementById('btn-next').disabled = currentPage >= totalPages;
+  } catch(e) {
+    document.getElementById('tbody').innerHTML = `<tr><td colspan="10"><div class="state-box"><div class="icon">⚠️</div><p>Error: ${e.message}</p></div></td></tr>`;
+    document.getElementById('panel-meta').textContent = 'Failed to load';
+  }
+}
+
+function renderTable(cfg, items) {
+  // headers
+  const ths = cfg.headers.map(h => `<th>${h}</th>`).join('') + '<th>Actions</th>';
+  document.getElementById('thead').innerHTML = `<tr>${ths}</tr>`;
+  if (!items.length) {
+    document.getElementById('tbody').innerHTML = `<tr><td colspan="${cfg.cols.length + 1}"><div class="state-box"><div class="icon">📭</div><p>No records found</p></div></td></tr>`;
+    return;
+  }
+  const rows = items.map(row => {
+    const cells = cfg.cols.map(col => {
+      let val = row[col];
+      if (val === null || val === undefined) return '<td><span style="color:var(--muted)">—</span></td>';
+      if (typeof val === 'boolean') val = val ? '✅' : '❌';
+      if (typeof val === 'string' && val.includes('T') && val.includes('Z')) val = val.split('T')[0];
+      if (cfg.badge && col === cfg.badge.key) {
+        const color = cfg.badge.map[val] || 'muted';
+        return `<td><span class="badge badge-${color}">${val}</span></td>`;
+      }
+      return `<td>${val}</td>`;
+    }).join('');
+    // action buttons
+    let editCall, delCall;
+    if (cfg.compositeKey) {
+      const [k1, k2] = cfg.compositeKey;
+      editCall = `openEdit(${JSON.stringify(row)})`;
+      delCall  = `deleteRecord('${row[k1]}','${row[k2]}')`;
+    } else {
+      editCall = `openEdit(${JSON.stringify(row)})`;
+      delCall  = `deleteRecord('${row[cfg.idKey]}')`;
+    }
+    const actions = `<td><div class="actions">
+      <button class="btn btn-edit btn-sm" onclick='${editCall}'>Edit</button>
+      <button class="btn btn-danger btn-sm" onclick="${delCall}">Delete</button>
+    </div></td>`;
+    return `<tr>${cells}${actions}</tr>`;
+  }).join('');
+  document.getElementById('tbody').innerHTML = rows;
+}
+
+function changePage(delta) {
+  currentPage = Math.max(1, Math.min(totalPages, currentPage + delta));
+  loadData();
+}
+
+// ─── Modal ───────────────────────────────────────────────────────────────────
+function buildForm(cfg, data = {}) {
+  return cfg.fields.map(f => {
+    const val = data[f.name] !== undefined ? data[f.name] : '';
+    let input = '';
+    if (f.type === 'select') {
+      const opts = f.options.map(o => `<option value="${o}" ${val == o ? 'selected' : ''}>${o}</option>`).join('');
+      input = `<select name="${f.name}" ${f.required ? 'required' : ''}>${opts}</select>`;
+    } else if (f.type === 'textarea') {
+      input = `<textarea name="${f.name}" ${f.required ? 'required' : ''}>${val}</textarea>`;
+    } else {
+      let v = val;
+      if (f.type === 'datetime-local' && v) v = v.replace('Z','').substring(0,16);
+      input = `<input type="${f.type}" name="${f.name}" value="${v}" ${f.required ? 'required' : ''} />`;
+    }
+    return `<div class="${f.full ? 'full' : ''}"><label>${f.label}</label>${input}</div>`;
+  }).join('');
+}
+
+function openAdd() {
+  editingId = null; editingId2 = null;
+  const cfg = TABLES[currentTable];
+  document.getElementById('modal-title').textContent = `Add ${cfg.label.replace(/s$/,'')}`;
+  document.getElementById('modal-form').innerHTML = buildForm(cfg);
+  document.getElementById('overlay').classList.add('open');
+}
+
+function openEdit(row) {
+  const cfg = TABLES[currentTable];
+  editingId = cfg.compositeKey ? row[cfg.compositeKey[0]] : row[cfg.idKey];
+  editingId2= cfg.compositeKey ? row[cfg.compositeKey[1]] : null;
+  document.getElementById('modal-title').textContent = `Edit ${cfg.label.replace(/s$/,'')}`;
+  document.getElementById('modal-form').innerHTML = buildForm(cfg, row);
+  document.getElementById('overlay').classList.add('open');
+}
+
+function closeModal() { document.getElementById('overlay').classList.remove('open'); }
+
+async function submitForm(e) {
+  e.preventDefault();
+  const cfg = TABLES[currentTable];
+  const fd  = new FormData(e.target);
+  const body = {};
+  fd.forEach((v, k) => { body[k] = v === '' ? null : v; });
+  // coerce booleans
+  if ('current_enrollment' in body) body.current_enrollment = body.current_enrollment === 'true';
+  if ('subject_is_elective' in body) body.subject_is_elective = body.subject_is_elective === 'true';
+
+  let url, method;
+  if (editingId !== null) {
+    url = `${BFF}${cfg.endpoint}/${editingId}${editingId2 ? '/'+editingId2 : ''}`;
+    method = 'PUT';
+  } else {
+    url = `${BFF}${cfg.endpoint}`;
+    method = 'POST';
+  }
+  try {
+    const r = await fetch(url, { method, headers: {'Content-Type':'application/json'}, body: JSON.stringify(body) });
+    const d = await r.json();
+    if (!r.ok) throw new Error(d.error || 'Request failed');
+    closeModal();
+    toast('Record saved successfully', 'success');
+    loadData();
+  } catch(err) { toast(err.message, 'error'); }
+}
+
+async function deleteRecord(id, id2) {
+  if (!confirm('Delete this record? This cannot be undone.')) return;
+  const cfg = TABLES[currentTable];
+  const url = `${BFF}${cfg.endpoint}/${id}${id2 ? '/'+id2 : ''}`;
+  try {
+    const r = await fetch(url, { method: 'DELETE' });
+    const d = await r.json();
+    if (!r.ok) throw new Error(d.error || 'Delete failed');
+    toast('Record deleted', 'success');
+    loadData();
+  } catch(e) { toast(e.message, 'error'); }
+}
+
+// ─── Toast ───────────────────────────────────────────────────────────────────
+function toast(msg, type = 'success') {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.className = `show ${type}`;
+  setTimeout(() => { t.className = ''; }, 3000);
+}
+
+// close overlay on click outside modal
+document.getElementById('overlay').addEventListener('click', e => {
+  if (e.target === document.getElementById('overlay')) closeModal();
+});
+
+// initial load
+loadData();
+</script>
+</body>
+</html>

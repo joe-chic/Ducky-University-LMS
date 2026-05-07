@@ -16,7 +16,7 @@ export async function bffGet(path, { token, params } = {}) {
     headers: token ? { Authorization: `Bearer ${token}` } : undefined,
   });
   const data = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(data?.message || `GET ${path} failed`);
+  if (!res.ok) throw new Error(data?.message || data?.error || `GET ${path} failed`);
   return data;
 }
 
@@ -30,7 +30,7 @@ export async function bffPost(path, body, { token } = {}) {
     body: JSON.stringify(body),
   });
   const data = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(data?.message || `POST ${path} failed`);
+  if (!res.ok) throw new Error(data?.message || data?.error || `POST ${path} failed`);
   return data;
 }
 
@@ -40,7 +40,7 @@ export async function bffDelete(path, { token } = {}) {
     headers: token ? { Authorization: `Bearer ${token}` } : undefined,
   });
   const data = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(data?.message || `DELETE ${path} failed`);
+  if (!res.ok) throw new Error(data?.message || data?.error || `DELETE ${path} failed`);
   return data;
 }
 
@@ -54,7 +54,7 @@ export async function bffPut(path, body, { token } = {}) {
     body: JSON.stringify(body),
   });
   const data = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(data?.message || `PUT ${path} failed`);
+  if (!res.ok) throw new Error(data?.message || data?.error || `PUT ${path} failed`);
   return data;
 }
 

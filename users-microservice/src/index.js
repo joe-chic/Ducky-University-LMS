@@ -78,9 +78,11 @@ app.post("/auth/login", async (req, res) => {
       },
     });
   } catch (err) {
-    // eslint-disable-next-line no-console
+    if (err.code === "23505") {
+      return res.status(400).json({ error: "Action not permitted: " + (err.detail || "Unique constraint violated.") });
+    }
     console.error(err);
-    res.status(500).json({ message: "Login failed" });
+    res.status(500).json({ error: err.message });
   }
 });
 
@@ -113,8 +115,11 @@ app.get("/users/:campus_id/by-campus", async (req, res) => {
       rol: u.role_name,
     });
   } catch (err) {
+    if (err.code === "23505") {
+      return res.status(400).json({ error: "Action not permitted: " + (err.detail || "Unique constraint violated.") });
+    }
     console.error(err);
-    res.status(500).json({ message: "Error al buscar usuario" });
+    res.status(500).json({ error: err.message });
   }
 });
 
@@ -175,9 +180,11 @@ app.get("/users", authMiddleware, async (req, res) => {
 
     res.json({ items, total, page, pageSize });
   } catch (err) {
-    // eslint-disable-next-line no-console
+    if (err.code === "23505") {
+      return res.status(400).json({ error: "Action not permitted: " + (err.detail || "Unique constraint violated.") });
+    }
     console.error(err);
-    res.status(500).json({ message: "Failed to fetch users" });
+    res.status(500).json({ error: err.message });
   }
 });
 
@@ -273,9 +280,11 @@ app.post("/users", authMiddleware, async (req, res) => {
       foto: null,
     });
   } catch (err) {
-    // eslint-disable-next-line no-console
+    if (err.code === "23505") {
+      return res.status(400).json({ error: "Action not permitted: " + (err.detail || "Unique constraint violated.") });
+    }
     console.error(err);
-    res.status(500).json({ message: "Failed to create user" });
+    res.status(500).json({ error: err.message });
   }
 });
 
@@ -393,9 +402,11 @@ app.put("/users/:id", authMiddleware, async (req, res) => {
       foto: null,
     });
   } catch (err) {
-    // eslint-disable-next-line no-console
+    if (err.code === "23505") {
+      return res.status(400).json({ error: "Action not permitted: " + (err.detail || "Unique constraint violated.") });
+    }
     console.error(err);
-    res.status(500).json({ message: "Failed to update user" });
+    res.status(500).json({ error: err.message });
   }
 });
 
@@ -417,9 +428,11 @@ app.delete("/users/:id", authMiddleware, async (req, res) => {
 
     res.json({ ok: true });
   } catch (err) {
-    // eslint-disable-next-line no-console
+    if (err.code === "23505") {
+      return res.status(400).json({ error: "Action not permitted: " + (err.detail || "Unique constraint violated.") });
+    }
     console.error(err);
-    res.status(500).json({ message: "Failed to disable user" });
+    res.status(500).json({ error: err.message });
   }
 });
 
