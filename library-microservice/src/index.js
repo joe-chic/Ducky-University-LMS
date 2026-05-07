@@ -622,7 +622,7 @@ app.put("/loans/:id/return", async (req, res) => {
     await client.query("BEGIN");
     const loan_id = Number(req.params.id);
     const loan = await client.query(
-      `SELECT pl.barcode, pl.loan_state, pl.initial_lent_at, pl.campus_id,
+      `SELECT pl.barcode, pl.loan_state, pl.initial_lent_at, pl.campus_id, pl.returned_at,
               r.resource_title, pe.example_location_code
        FROM physical_loans pl
        JOIN physical_examples pe ON pe.barcode = pl.barcode
@@ -631,8 +631,8 @@ app.put("/loans/:id/return", async (req, res) => {
       [loan_id]
     );
     if (!loan.rows.length) return res.status(404).json({ message: "Préstamo no encontrado" });
-    if (loan.rows[0].loan_state === "completed")
-      return res.status(409).json({ message: "El préstamo ya fue completado" });
+    if (loan.rows[0].loan_state === "completed" || loan.rows[0].returned_at)
+      return res.status(409).json({ message: "El préstamo ya fue completado o devuelto" });
 
     const returnedAt = new Date();
     const loanedAt  = new Date(loan.rows[0].initial_lent_at);
@@ -640,7 +640,7 @@ app.put("/loans/:id/return", async (req, res) => {
     const overdueDays = returnedAt > dueDate ? businessDaysBetween(dueDate, returnedAt) : 0;
     const DAILY_FINE  = 5.00; // $5 MXN per business day
     const fineAmount  = overdueDays > 0 ? +(overdueDays * DAILY_FINE).toFixed(2) : 0;
-    const finalState  = overdueDays > 0 ? 'overdue' : 'completed';
+    const finalState  = 'completed';
 
     await client.query(
       `UPDATE physical_loans
@@ -829,7 +829,7 @@ async function autoExpireDigitalLoans(resourceId) {
   const intervalExpr = `INTERVAL '${DIGITAL_ACCESS_DAYS} days'`;
   await query(`
     UPDATE digital_loans dl
-    SET digital_loan_state = 'completed', latest_modified_at = NOW()
+    SET digital_loan_state = 'completed', returned_at = NOW(), latest_modified_at = NOW()
     FROM (
       SELECT dl2.digital_loan_id,
              COALESCE(MAX(dlr.renewal_lent_at), dl2.initial_lent_at) AS last_access
@@ -883,7 +883,7 @@ app.get("/digital-loans", async (req, res) => {
     const whereSql = where.length ? `WHERE ${where.join(" AND ")}` : "";
     const r = await query(
       `SELECT dl.digital_loan_id, dl.resource_id, dl.campus_id, dl.initial_lent_at,
-              dl.digital_loan_state,
+              dl.digital_loan_state, dl.returned_at,
               r.resource_title AS titulo, r.resource_type AS tipo,
               o.organization_name AS editorial,
               (SELECT COUNT(*) FROM digital_loan_renewals dlr WHERE dlr.digital_loan_id = dl.digital_loan_id)::int AS renewal_count,
@@ -958,7 +958,7 @@ app.put("/digital-loans/:id/return", async (req, res) => {
   try {
     const id = Number(req.params.id);
     const r = await query(
-      `UPDATE digital_loans SET digital_loan_state='completed', latest_modified_at=NOW()
+      `UPDATE digital_loans SET digital_loan_state='completed', returned_at=NOW(), latest_modified_at=NOW()
        WHERE digital_loan_id=$1 AND digital_loan_state='active' RETURNING *`, [id]
     );
     if (!r.rows.length) return res.status(404).json({ message: "Préstamo digital activo no encontrado" });

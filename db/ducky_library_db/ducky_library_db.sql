@@ -249,6 +249,7 @@ CREATE TABLE digital_loans(
   resource_id BIGINT NOT NULL REFERENCES resources(resource_id),
   campus_id BIGINT NOT NULL,
   initial_lent_at TIMESTAMPTZ NOT NULL,
+  returned_at TIMESTAMPTZ,
   digital_loan_state media_loan NOT NULL,
   created_at TIMESTAMPTZ NOT NULL,
   created_by BIGINT NOT NULL,

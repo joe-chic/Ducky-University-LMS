@@ -381,7 +381,7 @@ app.get("/api/all-loans", async (req, res) => {
       barcode:         null,
       ubicacion:       null,
       initial_lent_at: l.initial_lent_at,
-      returned_at:     null,
+      returned_at:     l.digital_loan_state === "completed" ? l.returned_at : null,
       renewal_count:   l.renewal_count,
       journal_title:   l.journal_title,
       journal_issn:    l.journal_issn,
