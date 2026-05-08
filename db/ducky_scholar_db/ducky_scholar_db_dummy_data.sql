@@ -1,6 +1,6 @@
 -- Dummy data for ducky_scholar_db
 -- Global affiliate IDs used across DBs:
---   students: 2001, 2002, 2003
+--   students: 2001, 2002, 2003, 2004, 2005, 2006
 -- Cross-DB coherence:
 --   subject_availabilities.professor_id uses human_capital_db professors (e.g. 1001)
 
@@ -23,7 +23,10 @@ INSERT INTO students(student_id, student_status, student_email, student_phone, f
 VALUES
   (2001, 'active', 'student2001@ducky.edu', '+5215555550201', 'Maria', NULL, 'Gonzalez', 'Lopez', '2022-01-01T10:00:00Z'),
   (2002, 'active', 'student2002@ducky.edu', '+5215555550202', 'Luis', NULL, 'Perez', 'Garcia', '2022-02-01T10:00:00Z'),
-  (2003, 'suspended', 'student2003@ducky.edu', '+5215555550203', 'Sofia', 'A.', 'Ramirez', 'Santos', '2021-09-15T10:00:00Z');
+  (2003, 'suspended', 'student2003@ducky.edu', '+5215555550203', 'Sofia', 'A.', 'Ramirez', 'Santos', '2021-09-15T10:00:00Z'),
+  (2004, 'suspended', 'student2004@ducky.edu', '+5215555550204', 'Diego', NULL, 'Hernandez', 'Ruiz', '2022-03-01T10:00:00Z'),
+  (2005, 'active', 'student2005@ducky.edu', '+5215555550205', 'Elena', NULL, 'Castillo', 'Mora', '2022-04-01T10:00:00Z'),
+  (2006, 'inactive', 'student2006@ducky.edu', '+5215555550206', 'Mateo', NULL, 'Navarro', 'Cruz', '2022-05-01T10:00:00Z');
 
 -- Subjects
 INSERT INTO subjects(subject_id, department_id, subject_name, subject_description, status, credits, subject_is_elective)
@@ -61,7 +64,10 @@ INSERT INTO students_availabilities(
 VALUES
   (2001, 4001, 'enrolled', 95, NULL, NULL, NULL),
   (2002, 4001, 'enrolled', 88, NULL, NULL, NULL),
-  (2003, 4001, 'pending', NULL, NULL, NULL, NULL);
+  (2003, 4001, 'pending', NULL, NULL, NULL, NULL),
+  (2004, 4001, 'dropped', NULL, NULL, NULL, NULL),
+  (2005, 4001, 'enrolled', 90, NULL, NULL, NULL),
+  (2006, 4001, 'dropped', NULL, NULL, NULL, NULL);
 
 -- Fix sequences
 SELECT setval(pg_get_serial_sequence('departments','department_id'), (SELECT COALESCE(MAX(department_id), 1) FROM departments));

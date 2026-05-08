@@ -139,7 +139,12 @@
         <h2 id="panel-title">Fines</h2>
         <div class="meta" id="panel-meta">Loading…</div>
       </div>
-      <button class="btn btn-primary" onclick="openAdd()">＋ Add Record</button>
+      <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
+        <input id="pay-offender-id" type="number" placeholder="Student ID" style="width:130px"/>
+        <input id="pay-amount" type="number" placeholder="Amount" style="width:120px"/>
+        <button class="btn btn-primary" onclick="payByOffender()">Pay by student</button>
+        <button class="btn btn-primary" onclick="openAdd()">＋ Add Record</button>
+      </div>
     </div>
 
     <div class="table-wrap">
@@ -181,8 +186,8 @@ const fineBadge   = { paid:'green', unpaid:'red', waived:'muted', refunded:'yell
 const TABLES = {
   'fines': {
     label: 'Fines', endpoint: '/api/fines', idKey: 'find_id',
-    cols: ['find_id','price','fine_status','offender_id','offender_type','source_system','created_at'],
-    headers: ['ID','Amount','Status','Offender ID','Type','System','Date'],
+    cols: ['find_id','price','amount_due','fine_status','offender_id','offender_type','reason_type','reason_description','source_system','created_at'],
+    headers: ['ID','Amount','Due','Status','Offender ID','Type','Reason Type','Reason','System','Date'],
     badge: { key:'fine_status', map: fineBadge },
     salaryCols: ['price'],
     fields: [
@@ -353,15 +358,37 @@ async function submitForm(e) {
 }
 
 async function deleteRecord(id) {
-  if (!confirm('Delete this record? This cannot be undone.')) return;
+  if (!confirm('¿Confirmas desactivar/eliminar este registro?')) return;
   const cfg = TABLES[currentTable];
   try {
     const r = await fetch(`${BFF}${cfg.endpoint}/${id}`, { method: 'DELETE' });
     const d = await r.json();
-    if (!r.ok) throw new Error(d.error || 'Delete failed');
-    toast('✓ Record deleted', 'success');
+    if (!r.ok) throw new Error(d.message || d.error || 'Delete failed');
+    toast(d.soft_deleted ? '✓ Registro desactivado' : '✓ Record deleted', 'success');
     loadData();
   } catch(e) { toast('✗ ' + e.message, 'error'); }
+}
+
+async function payByOffender() {
+  const offender_id = Number(document.getElementById('pay-offender-id').value || 0);
+  const amount_paid = Number(document.getElementById('pay-amount').value || 0);
+  if (!offender_id || amount_paid <= 0) {
+    toast('✗ Enter valid student ID and amount', 'error');
+    return;
+  }
+  try {
+    const r = await fetch(`${BFF}/api/fines/pay-by-offender`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ offender_id, amount_paid, payment_method_id: 1 }),
+    });
+    const d = await r.json();
+    if (!r.ok) throw new Error(d.message || d.error || 'Payment failed');
+    toast(`✓ Applied $${Number(d.total_applied || 0).toFixed(2)} to student ${offender_id}`, 'success');
+    loadData();
+  } catch (e) {
+    toast('✗ ' + e.message, 'error');
+  }
 }
 
 function toast(msg, type = 'success') {

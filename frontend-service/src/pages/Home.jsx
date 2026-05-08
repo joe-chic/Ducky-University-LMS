@@ -1,5 +1,5 @@
 import { useSidebar } from "../hooks/useSidebar";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import "./Home.css";
 import landingImage from "../assets/images/landingImage.png";
 import Sidebar from "../components/Sidebar";
@@ -35,6 +35,7 @@ function Home() {
   const [ejemplares, setEjemplares] = useState([]);
   const [nuevoEjemplar, setNuevoEjemplar] = useState({ barcode: "", location_code: "", health_state: "good", op_state: "available" });
   const [formErrors, setFormErrors] = useState({});
+  const [blockedStatus, setBlockedStatus] = useState({ loading: false, isBlocked: false, unpaidCount: 0, totalUnpaid: 0 });
 
   const errorInputStyle = { border: "1.5px solid #d32f2f", background: "#fff5f5" };
   const errorTextStyle = { color: "#d32f2f", fontSize: "12px", marginTop: "4px" };
@@ -49,6 +50,29 @@ function Home() {
     }
     loadMetadata();
   }, []);
+
+  const refreshBlockedStatus = useCallback(async () => {
+    if (hasManagementRole) return;
+    const campusId = Number(localStorage.getItem("ducky_campus_id") || 0);
+    if (!campusId) return;
+    setBlockedStatus((s) => ({ ...s, loading: true }));
+    try {
+      const token = getToken();
+      const reconciliation = await bffPost(`/api/fines/reconcile-campus/${campusId}`, {}, { token });
+      setBlockedStatus({
+        loading: false,
+        isBlocked: Boolean(reconciliation?.has_unpaid_fines),
+        unpaidCount: Number(reconciliation?.unpaid_count || 0),
+        totalUnpaid: Number(reconciliation?.total_unpaid || 0),
+      });
+    } catch {
+      setBlockedStatus((s) => ({ ...s, loading: false }));
+    }
+  }, [hasManagementRole]);
+
+  useEffect(() => {
+    refreshBlockedStatus();
+  }, [refreshBlockedStatus]);
 
   const fetchRecursos = async (cancelToken) => {
     setLoading(true);
@@ -196,6 +220,12 @@ function Home() {
         <div className="hero" style={{ backgroundImage: `linear-gradient(rgba(0,0,0,0.4), rgba(0,0,0,0.4)), url(${landingImage})` }}>
           <h1>Biblioteca de Recursos</h1>
         </div>
+
+        {!hasManagementRole && blockedStatus.isBlocked && (
+          <div style={{ margin: "16px 60px 0 60px", background: "#ffebee", border: "1px solid #ef9a9a", color: "#b71c1c", borderRadius: "8px", padding: "12px 16px", fontWeight: 600 }}>
+            Cuenta bloqueada por multas pendientes: {blockedStatus.unpaidCount} multa(s), total ${blockedStatus.totalUnpaid.toFixed(2)} MXN. Puedes iniciar sesión, pero no podrás solicitar préstamos hasta liquidarlas.
+          </div>
+        )}
 
         {/* Recursos */}
         <div style={{ padding: "0 60px" }}>

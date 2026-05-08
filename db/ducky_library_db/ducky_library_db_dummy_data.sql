@@ -178,6 +178,18 @@ VALUES
   (6001, 'PHY-5001', 2001, '2023-10-27T10:00:00-04', '2023-12-01T10:00:00-04',
    'completed', '2023-10-27T10:00:00-04', 1, '2023-12-01T10:00:00-04', 1);
 
+-- Extra seeded cases for sanctions workflow
+INSERT INTO physical_loans(
+  loan_id, barcode, campus_id, initial_lent_at, returned_at,
+  loan_state, created_at, created_by, latest_modified_at, latest_modified_by
+)
+VALUES
+  (6003, 'PHY-5003-A', 2004, '2023-11-01T10:00:00-04', '2023-11-10T10:00:00-04',
+   'completed', '2023-11-01T10:00:00-04', 1, '2023-11-10T10:00:00-04', 1),
+  (6005, 'PHY-5005-A', 2006, '2023-11-02T10:00:00-04', '2023-11-15T10:00:00-04',
+   'completed', '2023-11-02T10:00:00-04', 1, '2023-11-15T10:00:00-04', 1)
+ON CONFLICT DO NOTHING;
+
 INSERT INTO physical_loan_renewals(physical_renewal_id, loan_id, renewal_lent_at)
 VALUES
   (6101, 6001, '2023-11-01T10:00:00-04');

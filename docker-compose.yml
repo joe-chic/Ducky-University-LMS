@@ -110,6 +110,7 @@ services:
       PORT: 4000
       USERS_BASE_URL: http://users-microservice:3001
       LIBRARY_BASE_URL: http://library-microservice:3002
+      TREASURY_BASE_URL: http://treasury-microservice:3007
     depends_on:
       - users-microservice
       - library-microservice

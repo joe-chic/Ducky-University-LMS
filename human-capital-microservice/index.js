@@ -21,7 +21,14 @@ app.use(cors());
 app.use(express.json());
 const PORT = process.env.PORT || 3005;
 
-// ─── Helpers ───────────────────────────────────────────────────────────────
+const EMPLOYEE_STATUSES = ['active', 'inactive', 'suspended', 'terminated', 'on_leave'];
+const COLLAB_STATUSES = ['active', 'inactive', 'suspended', 'terminated'];
+const PROF_STATUSES = ['active', 'inactive', 'on_leave', 'retired'];
+const SHIFT_TYPES = ['morning', 'evening', 'night', 'mixed'];
+
+function badRequest(res, message) {
+  return res.status(400).json({ message });
+}
 const paginate = async (res, countSql, dataSql, params, page) => {
   const limit = 20;
   const offset = (page - 1) * limit;
@@ -97,16 +104,19 @@ app.get('/api/employees', async (req, res) => {
 app.post('/api/employees', async (req, res) => {
   const { first_name, middle_name, father_lastname, mother_lastname, employee_email, employee_phone, employee_status, RFC, CLABE, hire_date, base_salary } = req.body;
   try {
+    if (!first_name || !father_lastname) return badRequest(res, "Nombre y apellido son obligatorios.");
+    if (!EMPLOYEE_STATUSES.includes(String(employee_status || ""))) return badRequest(res, "employee_status inválido.");
+    if (!RFC || String(RFC).trim().length < 12) return badRequest(res, "RFC inválido.");
+    if (!CLABE || String(CLABE).trim().length !== 18) return badRequest(res, "CLABE debe tener 18 dígitos.");
+    if (!hire_date) return badRequest(res, "hire_date es obligatorio.");
+    if (base_salary === undefined || Number(base_salary) < 0) return badRequest(res, "base_salary inválido.");
     const r = await pool.query(
       `INSERT INTO employees(first_name,middle_name,father_lastname,mother_lastname,employee_email,employee_phone,employee_status,"RFC","CLABE",hire_date,base_salary)
        VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) RETURNING *`,
-      [first_name, middle_name || null, father_lastname, mother_lastname || null, employee_email || null, employee_phone || null, employee_status, RFC, CLABE, hire_date, base_salary]);
-
+      [first_name, middle_name || null, father_lastname, mother_lastname || null, employee_email || null, employee_phone || null, employee_status, RFC, CLABE, hire_date, Number(base_salary)]
+    );
     const employee = r.rows[0];
-
-    // Notify registry: register the new employee affiliated with Human Capital
     if (employee_email) notifyRegistry(employee_email).catch(() => {});
-
     ok(res, employee, 'Empleado registrado con éxito.');
   } catch (e) { handleError(res, e); }
 });
@@ -114,40 +124,34 @@ app.post('/api/employees', async (req, res) => {
 app.put('/api/employees/:id', async (req, res) => {
   const { first_name, middle_name, father_lastname, mother_lastname, employee_email, employee_phone, employee_status, RFC, CLABE, hire_date, base_salary } = req.body;
   try {
-    // Fetch current email BEFORE updating to detect a change
+    if (!first_name || !father_lastname) return badRequest(res, "Nombre y apellido son obligatorios.");
+    if (!EMPLOYEE_STATUSES.includes(String(employee_status || ""))) return badRequest(res, "employee_status inválido.");
+    if (!RFC || String(RFC).trim().length < 12) return badRequest(res, "RFC inválido.");
+    if (!CLABE || String(CLABE).trim().length !== 18) return badRequest(res, "CLABE debe tener 18 dígitos.");
+    if (!hire_date) return badRequest(res, "hire_date es obligatorio.");
+    if (base_salary === undefined || Number(base_salary) < 0) return badRequest(res, "base_salary inválido.");
     const before = await pool.query('SELECT employee_email FROM employees WHERE employee_id=$1', [req.params.id]);
     if (!before.rows.length) return res.status(404).json({ error: 'Empleado no encontrado.' });
     const old_email = before.rows[0].employee_email;
-
     const r = await pool.query(
       `UPDATE employees SET first_name=$1,middle_name=$2,father_lastname=$3,mother_lastname=$4,employee_email=$5,employee_phone=$6,employee_status=$7,"RFC"=$8,"CLABE"=$9,hire_date=$10,base_salary=$11 WHERE employee_id=$12 RETURNING *`,
-      [first_name, middle_name || null, father_lastname, mother_lastname || null, employee_email || null, employee_phone || null, employee_status, RFC, CLABE, hire_date, base_salary, req.params.id]);
-
-    // If the email changed, sync it in the registry
+      [first_name, middle_name || null, father_lastname, mother_lastname || null, employee_email || null, employee_phone || null, employee_status, RFC, CLABE, hire_date, Number(base_salary), req.params.id]);
     if (old_email && employee_email && old_email !== employee_email) {
       notifyEmailUpdate(old_email, employee_email).catch(() => {});
     }
-
     ok(res, r.rows[0], 'Empleado actualizado con éxito.');
   } catch (e) { handleError(res, e); }
 });
 
 app.delete('/api/employees/:id', async (req, res) => {
   try {
-    // Soft-delete: fetch current email for registry deregister call
-    const lookup = await pool.query('SELECT employee_email FROM employees WHERE employee_id=$1', [req.params.id]);
-    if (!lookup.rows.length) return res.status(404).json({ error: 'Empleado no encontrado.' });
-    const { employee_email } = lookup.rows[0];
-
-    // Set status to inactive — record is preserved
     const r = await pool.query(
       `UPDATE employees SET employee_status='inactive' WHERE employee_id=$1 RETURNING *`,
-      [req.params.id]);
-
-    // Notify registry: mark HC ↔ affiliate association as no longer operational
-    if (employee_email) notifyDeregister(employee_email).catch(() => {});
-
-    ok(res, r.rows[0], 'Empleado desactivado con éxito. El registro se conserva en la base de datos.');
+      [req.params.id]
+    );
+    if (!r.rows.length) return res.status(404).json({ message: "Employee not found" });
+    if (r.rows[0].employee_email) notifyDeregister(r.rows[0].employee_email).catch(() => {});
+    res.json({ ok: true, soft_deleted: true, item: r.rows[0], message: "Empleado desactivado con éxito." });
   } catch (e) { handleError(res, e); }
 });
 
@@ -224,6 +228,9 @@ app.get('/api/collaborators', async (req, res) => {
 app.post('/api/collaborators', async (req, res) => {
   const { collaborator_id, job_title, supervisor_id, shift_type, collaborator_status } = req.body;
   try {
+    if (!collaborator_id || !job_title || !supervisor_id) return badRequest(res, "collaborator_id, job_title y supervisor_id son obligatorios.");
+    if (!SHIFT_TYPES.includes(String(shift_type || ""))) return badRequest(res, "shift_type inválido.");
+    if (!COLLAB_STATUSES.includes(String(collaborator_status || ""))) return badRequest(res, "collaborator_status inválido.");
     const r = await pool.query(
       'INSERT INTO collaborator(collaborator_id,job_title,supervisor_id,shift_type,collaborator_status) VALUES($1,$2,$3,$4,$5) RETURNING *',
       [collaborator_id, job_title, supervisor_id, shift_type, collaborator_status]);
@@ -233,6 +240,9 @@ app.post('/api/collaborators', async (req, res) => {
 app.put('/api/collaborators/:id', async (req, res) => {
   const { job_title, supervisor_id, shift_type, collaborator_status } = req.body;
   try {
+    if (!job_title || !supervisor_id) return badRequest(res, "job_title y supervisor_id son obligatorios.");
+    if (!SHIFT_TYPES.includes(String(shift_type || ""))) return badRequest(res, "shift_type inválido.");
+    if (!COLLAB_STATUSES.includes(String(collaborator_status || ""))) return badRequest(res, "collaborator_status inválido.");
     const r = await pool.query(
       'UPDATE collaborator SET job_title=$1,supervisor_id=$2,shift_type=$3,collaborator_status=$4 WHERE collaborator_id=$5 RETURNING *',
       [job_title, supervisor_id, shift_type, collaborator_status, req.params.id]);
@@ -241,8 +251,12 @@ app.put('/api/collaborators/:id', async (req, res) => {
 });
 app.delete('/api/collaborators/:id', async (req, res) => {
   try {
-    await pool.query('DELETE FROM collaborator WHERE collaborator_id=$1', [req.params.id]);
-    res.json({ message: 'Colaborador eliminado con éxito.', ok: true });
+    const r = await pool.query(
+      `UPDATE collaborator SET collaborator_status='inactive' WHERE collaborator_id=$1 RETURNING *`,
+      [req.params.id]
+    );
+    if (!r.rows.length) return res.status(404).json({ message: "Collaborator not found" });
+    res.json({ ok: true, soft_deleted: true, item: r.rows[0], message: "Colaborador desactivado con éxito." });
   } catch (e) { handleError(res, e); }
 });
 
@@ -259,6 +273,8 @@ app.get('/api/professors', async (req, res) => {
 app.post('/api/professors', async (req, res) => {
   const { professor_id, department_id, academic_title, research_area, hire_date, office_location_id, professor_status } = req.body;
   try {
+    if (!professor_id || !department_id || !academic_title || !hire_date) return badRequest(res, "professor_id, department_id, academic_title y hire_date son obligatorios.");
+    if (!PROF_STATUSES.includes(String(professor_status || ""))) return badRequest(res, "professor_status inválido.");
     const r = await pool.query(
       'INSERT INTO professors(professor_id,department_id,academic_title,research_area,hire_date,office_location_id,professor_status) VALUES($1,$2,$3,$4,$5,$6,$7) RETURNING *',
       [professor_id, department_id, academic_title, research_area || null, hire_date, office_location_id || null, professor_status]);
@@ -268,6 +284,8 @@ app.post('/api/professors', async (req, res) => {
 app.put('/api/professors/:id', async (req, res) => {
   const { department_id, academic_title, research_area, hire_date, office_location_id, professor_status } = req.body;
   try {
+    if (!department_id || !academic_title || !hire_date) return badRequest(res, "department_id, academic_title y hire_date son obligatorios.");
+    if (!PROF_STATUSES.includes(String(professor_status || ""))) return badRequest(res, "professor_status inválido.");
     const r = await pool.query(
       'UPDATE professors SET department_id=$1,academic_title=$2,research_area=$3,hire_date=$4,office_location_id=$5,professor_status=$6 WHERE professor_id=$7 RETURNING *',
       [department_id, academic_title, research_area || null, hire_date, office_location_id || null, professor_status, req.params.id]);
@@ -276,8 +294,12 @@ app.put('/api/professors/:id', async (req, res) => {
 });
 app.delete('/api/professors/:id', async (req, res) => {
   try {
-    await pool.query('DELETE FROM professors WHERE professor_id=$1', [req.params.id]);
-    res.json({ message: 'Profesor eliminado con éxito.', ok: true });
+    const r = await pool.query(
+      `UPDATE professors SET professor_status='inactive' WHERE professor_id=$1 RETURNING *`,
+      [req.params.id]
+    );
+    if (!r.rows.length) return res.status(404).json({ message: "Professor not found" });
+    res.json({ ok: true, soft_deleted: true, item: r.rows[0], message: "Profesor desactivado con éxito." });
   } catch (e) { handleError(res, e); }
 });
 
