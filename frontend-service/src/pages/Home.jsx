@@ -58,12 +58,12 @@ function Home() {
     setBlockedStatus((s) => ({ ...s, loading: true }));
     try {
       const token = getToken();
-      const reconciliation = await bffPost(`/api/fines/reconcile-campus/${campusId}`, {}, { token });
+      const status = await bffGet(`/api/fines/status-campus/${campusId}`, { token });
       setBlockedStatus({
         loading: false,
-        isBlocked: Boolean(reconciliation?.has_unpaid_fines),
-        unpaidCount: Number(reconciliation?.unpaid_count || 0),
-        totalUnpaid: Number(reconciliation?.total_unpaid || 0),
+        isBlocked: Boolean(status?.blocked_for_loans),
+        unpaidCount: Number(status?.unpaid_count || 0),
+        totalUnpaid: Number(status?.total_unpaid || 0),
       });
     } catch {
       setBlockedStatus((s) => ({ ...s, loading: false }));

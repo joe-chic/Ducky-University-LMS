@@ -5,7 +5,7 @@ import { jsPDF } from "jspdf";
 import "./Home.css";
 import Sidebar from "../components/Sidebar";
 import TopBar from "../components/TopBar";
-import { bffGet, bffPost, getToken } from "../api/bff";
+import { bffGet, getToken } from "../api/bff";
 
 function MisPrestamos() {
   const navigate = useNavigate();
@@ -38,7 +38,6 @@ function MisPrestamos() {
     setLoadingMultas(true);
     try {
       const token = getToken();
-      await bffPost(`/api/fines/reconcile-campus/${campusId}`, {}, { token }).catch(() => ({}));
       const data = await bffGet("/api/fines", { token, params: { campus_id: campusId } });
       setMultas(Array.isArray(data) ? data : (Array.isArray(data?.items) ? data.items : []));
     } catch {

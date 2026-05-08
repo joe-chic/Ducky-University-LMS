@@ -25,3 +25,9 @@ db/*.csv
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
+
+# Android / Gradle local caches and lock files
+android-app/.gradle/
+android-app/**/checksums.lock
+android-app/**/fileHashes.lock
+android-app/**/executionHistory.lock

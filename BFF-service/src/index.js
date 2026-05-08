@@ -43,8 +43,6 @@ async function reconcileLibraryFinesSanctions() {
         const currentState = userRes.data?.user_state;
         if (info.hasUnpaid && currentState !== "blocked") {
           await axios.put(`${USERS_BASE_URL}/users/${campusId}/sanction-state`, { blocked: true }, { timeout: 10_000 });
-        } else if (!info.hasUnpaid && currentState === "blocked") {
-          await axios.put(`${USERS_BASE_URL}/users/${campusId}/sanction-state`, { blocked: false }, { timeout: 10_000 });
         }
       } catch (_err) {}
     }
@@ -468,12 +466,6 @@ app.post("/api/fines/reconcile-campus/:campus_id", async (req, res) => {
       nextState = upd.data?.user_state || "blocked";
       changed = true;
     }
-    if (userExists && !hasUnpaid && currentState === "blocked") {
-      const upd = await axios.put(`${USERS_BASE_URL}/users/${campusId}/sanction-state`, { blocked: false }, { timeout: 10_000 });
-      nextState = upd.data?.user_state || "active";
-      changed = true;
-    }
-
     return res.json({
       ok: true,
       campus_id: campusId,
@@ -488,12 +480,67 @@ app.post("/api/fines/reconcile-campus/:campus_id", async (req, res) => {
       message: hasUnpaid
         ? `El alumno mantiene ${unpaidCount} multa(s) sin pagar. Sigue bloqueado para préstamos.`
         : userExists
-          ? "Sin multas pendientes. La sanción fue levantada (si existía)."
+          ? "Sin multas pendientes en tesorería. Un bibliotecario/administrador puede levantar la sanción."
           : "Sin multas pendientes, pero el campus_id no existe en users-microservice.",
     });
   } catch (err) {
     const status = err?.response?.status || 500;
     return res.status(status).json({ message: err?.response?.data?.message || "Error al reconciliar sanciones del alumno." });
+  }
+});
+
+// Student-safe status endpoint: does not mutate sanction state.
+app.get("/api/fines/status-campus/:campus_id", async (req, res) => {
+  try {
+    const campusId = Number(req.params.campus_id);
+    if (!campusId) return res.status(400).json({ message: "campus_id inválido." });
+
+    const [treasuryStatusRes, userRes] = await Promise.all([
+      axios.get(`${TREASURY_BASE_URL}/fines/offender/${campusId}/status`, { timeout: 10_000 }),
+      axios.get(`${USERS_BASE_URL}/users/${campusId}/by-campus`, { timeout: 10_000 }),
+    ]);
+    const hasUnpaid = Boolean(treasuryStatusRes.data?.has_unpaid_fines);
+    const unpaidCount = Number(treasuryStatusRes.data?.unpaid_count || 0);
+    const totalUnpaid = Number(treasuryStatusRes.data?.total_unpaid || 0);
+    const userState = userRes.data?.user_state || "active";
+
+    return res.json({
+      ok: true,
+      campus_id: campusId,
+      has_unpaid_fines: hasUnpaid,
+      unpaid_count: unpaidCount,
+      total_unpaid: totalUnpaid,
+      user_state: userState,
+      blocked_for_loans: userState === "blocked",
+    });
+  } catch (err) {
+    const status = err?.response?.status || 500;
+    return res.status(status).json({ message: err?.response?.data?.message || "Error al consultar estatus de multas/sanción." });
+  }
+});
+
+// Explicit unblock action for librarian/admin after validation.
+app.post("/api/fines/unblock-campus/:campus_id", async (req, res) => {
+  try {
+    const campusId = Number(req.params.campus_id);
+    if (!campusId) return res.status(400).json({ message: "campus_id inválido." });
+
+    const treasuryStatusRes = await axios.get(`${TREASURY_BASE_URL}/fines/offender/${campusId}/status`, { timeout: 10_000 });
+    const hasUnpaid = Boolean(treasuryStatusRes.data?.has_unpaid_fines);
+    if (hasUnpaid) {
+      return res.status(409).json({ message: "No se puede levantar la sanción: el alumno aún tiene multas sin pagar." });
+    }
+
+    const upd = await axios.put(`${USERS_BASE_URL}/users/${campusId}/sanction-state`, { blocked: false }, { timeout: 10_000 });
+    return res.json({
+      ok: true,
+      campus_id: campusId,
+      user_state_after: upd.data?.user_state || "active",
+      message: "Sanción levantada correctamente. El alumno vuelve a estar habilitado para préstamos.",
+    });
+  } catch (err) {
+    const status = err?.response?.status || 500;
+    return res.status(status).json({ message: err?.response?.data?.message || "Error al levantar la sanción del alumno." });
   }
 });
 

@@ -43,6 +43,7 @@ function Prestamos() {
   const [payAmount, setPayAmount] = useState("");
   const [validatedCampus, setValidatedCampus] = useState({});
   const [finePriceEdits, setFinePriceEdits] = useState({});
+  const [sanctionByCampus, setSanctionByCampus] = useState({});
 
   useEffect(() => { if (!token) navigate("/"); }, [token, navigate]);
   useEffect(() => {
@@ -67,7 +68,31 @@ function Prestamos() {
     setLoadingFines(true);
     try {
       const data = await bffGet("/api/fines", { token });
-      setFines(Array.isArray(data) ? data : []);
+      const fineItems = Array.isArray(data) ? data : [];
+      setFines(fineItems);
+
+      const campusIds = Array.from(
+        new Set(
+          fineItems
+            .map((f) => Number(f.offender_id || 0))
+            .filter((id) => id > 0)
+        )
+      );
+      if (campusIds.length) {
+        const statusEntries = await Promise.all(
+          campusIds.map(async (id) => {
+            try {
+              const s = await bffGet(`/api/fines/status-campus/${id}`, { token });
+              return [id, { blocked: Boolean(s?.blocked_for_loans), userState: s?.user_state || "unknown" }];
+            } catch {
+              return [id, { blocked: null, userState: "unknown" }];
+            }
+          })
+        );
+        setSanctionByCampus(Object.fromEntries(statusEntries));
+      } else {
+        setSanctionByCampus({});
+      }
     } catch { setFines([]); }
     finally  { setLoadingFines(false); }
   }, [token]);
@@ -181,7 +206,7 @@ function Prestamos() {
     }
     if (!window.confirm(`¿Levantar sanción de préstamos para el alumno ${campusId}?`)) return;
     try {
-      const res = await bffPost(`/api/fines/reconcile-campus/${campusId}`, {}, { token });
+      const res = await bffPost(`/api/fines/unblock-campus/${campusId}`, {}, { token });
       setMsgMulta({ type: "success", text: res.message || "Sanción actualizada correctamente." });
       fetchFines();
     } catch (err) {
@@ -272,6 +297,13 @@ function Prestamos() {
     if (s === "unpaid") return { background: "#ffebee", color: "#c62828", border: "1px solid #ef9a9a" };
     if (s === "paid")   return { background: "#e8f5e9", color: "#2e7d32", border: "1px solid #a5d6a7" };
     return { background: "#f5f5f5", color: "#616161", border: "1px solid #e0e0e0" };
+  }
+
+  function sanctionLabel(campusId) {
+    const state = sanctionByCampus[Number(campusId)];
+    if (!state || state.blocked === null) return { text: "Desconocido", style: { background: "#f5f5f5", color: "#616161", border: "1px solid #e0e0e0" } };
+    if (state.blocked) return { text: "Bloqueado", style: { background: "#ffebee", color: "#c62828", border: "1px solid #ef9a9a" } };
+    return { text: "Habilitado", style: { background: "#e8f5e9", color: "#2e7d32", border: "1px solid #a5d6a7" } };
   }
 
   const isActive = l => l.state === "active" || l.state === "overdue";
@@ -575,10 +607,12 @@ function Prestamos() {
               ) : (
                 <table>
                   <thead>
-                    <tr><th>#</th><th>Usuario ID</th><th>Monto</th><th>Motivo</th><th>Préstamo</th><th>Estado</th><th>Fecha</th><th>Acción</th></tr>
+                    <tr><th>#</th><th>Usuario ID</th><th>Monto</th><th>Motivo</th><th>Préstamo</th><th>Estado multa</th><th>Sanción préstamo</th><th>Fecha</th><th>Acción</th></tr>
                   </thead>
                   <tbody>
-                    {filteredFines.map(f => (
+                    {filteredFines.map(f => {
+                      const sancion = sanctionLabel(f.offender_id);
+                      return (
                       <tr key={f.find_id}>
                         <td>{f.find_id}</td>
                         <td>{f.offender_id}</td>
@@ -588,6 +622,11 @@ function Prestamos() {
                         <td>
                           <span style={{ padding: "3px 10px", borderRadius: "20px", fontSize: "0.78rem", fontWeight: 700, ...fineStatusStyle(f.fine_status) }}>
                             {fineStatusLabel(f.fine_status)}
+                          </span>
+                        </td>
+                        <td>
+                          <span style={{ padding: "3px 10px", borderRadius: "20px", fontSize: "0.78rem", fontWeight: 700, ...sancion.style }}>
+                            {sancion.text}
                           </span>
                         </td>
                         <td>{formatDate(f.created_at)}</td>
@@ -628,7 +667,7 @@ function Prestamos() {
                           </div>
                         </td>
                       </tr>
-                    ))}
+                    )})}
                   </tbody>
                 </table>
               )}
