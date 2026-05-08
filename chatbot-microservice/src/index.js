@@ -14,20 +14,114 @@ const OLLAMA_URL = process.env.OLLAMA_URL || "http://ollama:11434";
 const OLLAMA_MODEL = process.env.OLLAMA_MODEL || "tinyllama";
 
 function fallbackReply(input) {
-  const q = String(input || "").toLowerCase();
-  if (q.includes("prestamo") || q.includes("préstamo")) {
-    return "Para hacer un préstamo: 1) ve a Recursos, 2) abre el recurso, 3) solicita el préstamo del ejemplar disponible. Si tienes multas pendientes, el sistema bloqueará nuevos préstamos hasta pagarlas.";
+  const q = String(input || "").toLowerCase().trim();
+  const hasAny = (terms) => terms.some((t) => q.includes(t));
+  const pick = (arr) => arr[Math.floor(Math.random() * arr.length)];
+  const isQuestion = q.includes("?") || hasAny(["donde", "dónde", "como", "cómo", "que ", "qué ", "cual", "cuál"]);
+  const lmsWords = [
+    "libro", "libros", "recurso", "recursos", "catalogo", "catálogo",
+    "biblioteca", "prestamo", "préstamo", "renovar", "devolucion", "devolución",
+    "multa", "multas", "mis prestamos", "mis préstamos", "lms",
+    "autor", "isbn", "issn", "editorial", "idioma", "titulo", "título",
+  ];
+  const isLmsQuery = hasAny(lmsWords);
+  const resourceTerms = [
+    "libro", "libros", "ebook", "e-book", "e book", "libro digital",
+    "audiovisual", "video", "pelicula", "película", "documental",
+    "mapa", "mapas", "cartograf",
+    "articulo", "artículos", "articulo", "paper",
+    "revista", "revistas", "journal", "journals",
+    "recurso", "recursos", "material", "materiales",
+  ];
+
+  // LMS-first intents
+  if (hasAny(["prestamo", "préstamo", "solicitar libro", "pedir libro"])) {
+    return "Para hacer un préstamo: entra a Recursos, abre el material y solicita el ejemplar disponible. Si tienes multas pendientes, primero liquídalas para habilitar nuevos préstamos.";
   }
-  if (q.includes("dura") || q.includes("cuanto") || q.includes("cuánto")) {
-    return "La duración típica del préstamo físico es de alrededor de 5 días hábiles. Para la fecha exacta, revisa el detalle del préstamo en Mis Préstamos.";
+  if (hasAny(["donde veo libros", "dónde veo libros", "donde ver libros", "dónde ver libros", "ver libros", "buscar libros", "catalogo", "catálogo", "recursos"])) {
+    return "Puedes ver el catálogo en la sección Recursos del LMS. Ahí puedes buscar por título/autor/tipo y abrir el detalle para revisar disponibilidad o solicitar préstamo.";
   }
-  if (q.includes("renuevo") || q.includes("renovar")) {
-    return "Para renovar: entra a la sección de Préstamos y busca tu préstamo activo; si está habilitado, usa el botón Renovar.";
+  if (hasAny(["autor favorito", "mi autor", "por autor", "buscar autor", "autor"])) {
+    return pick([
+      "Para encontrar obras de tu autor favorito, entra a Recursos y busca por nombre/apellido del autor. Si aparecen muchos resultados, combina con tipo de recurso o palabras clave del título.",
+      "Ve a Recursos y escribe el nombre del autor en la búsqueda. Luego filtra por tipo (libro, e-book, artículo, etc.) para quedarte con lo que te interesa.",
+    ]);
   }
-  if (q.includes("multa") || q.includes("multas")) {
-    return "Para verificar multas pendientes: ve a Mis Préstamos > Mis Multas. Si tienes adeudos, primero realiza el pago y luego valida/actualiza la sanción en el flujo de biblioteca.";
+  if (hasAny(["isbn", "issn"])) {
+    return "Sí puedes buscar por ISBN/ISSN: en Recursos pega el código completo (con o sin guiones). Si no aparece, prueba sin espacios y valida que el número sea exacto.";
   }
-  return "Puedo ayudarte con préstamos, renovaciones, devoluciones y multas. Prueba con: '¿Cómo hago un préstamo?' o '¿Tengo multas pendientes?'.";
+  if (hasAny(["editorial", "publisher", "idioma", "language", "titulo", "título", "palabra clave", "keyword"])) {
+    return "En Recursos puedes buscar por metadatos como título, editorial, idioma o palabra clave. Escribe el dato y luego refina con el tipo de recurso para resultados más precisos.";
+  }
+  if (hasAny(resourceTerms)) {
+    return pick([
+      "Para encontrar ese tipo de contenido, entra a Recursos y usa búsqueda/filtros por tipo (libro, e-book, audiovisual, mapa, artículo o revista). Luego abre el detalle para ver disponibilidad o préstamo.",
+      "Ese material se consulta en Recursos. Filtra por tipo (por ejemplo audiovisual, mapa, e-book, journal o artículo), revisa la ficha y desde ahí continúas con préstamo o consulta.",
+      "Lo ubicas en Recursos del LMS: busca por palabras clave y tipo de recurso (libros, mapas, audiovisuales, e-books, artículos, revistas/journals). En la ficha verás cómo accederlo.",
+    ]);
+  }
+  if ((hasAny(["cuanto", "cuánto", "dura", "duracion", "duración"]) && hasAny(["prestamo", "préstamo"]))) {
+    return "Como referencia general, el préstamo físico dura cerca de 5 días hábiles. La fecha exacta la ves en Mis Préstamos.";
+  }
+  if (hasAny(["renovar", "renuevo", "renovacion", "renovación"])) {
+    return "Para renovar, ve a Préstamos y busca tu préstamo activo. Si la política lo permite, verás la opción de renovar.";
+  }
+  if (hasAny(["multa", "multas", "sancion", "sanción"])) {
+    return "Revisa Mis Préstamos > Mis Multas para ver adeudos. Si ya pagaste en tesorería, valida/actualiza tu estado para levantar la sanción.";
+  }
+
+  // Conversational intents
+  if (hasAny(["hola", "buenas", "hello", "hi"])) {
+    return pick([
+      "Hola. Estoy para ayudarte con el LMS y con preguntas generales cortas.",
+      "Hola, ¿qué necesitas hoy? Si quieres, te guío paso a paso.",
+    ]);
+  }
+  if (hasAny(["como estas", "cómo estás", "que tal", "qué tal", "how are you"])) {
+    return pick([
+      "Todo bien por aquí. ¿En qué te ayudo?",
+      "Bien, gracias. ¿Quieres ayuda con biblioteca o con una duda general?",
+    ]);
+  }
+  if (hasAny(["gracias", "thanks"])) {
+    return pick(["Con gusto.", "De nada, aquí sigo para ayudarte."]);
+  }
+  if (hasAny(["quien eres", "quién eres", "que puedes hacer", "qué puedes hacer", "ayuda"])) {
+    return "Soy el Asistente Ducky: especializado en el LMS de biblioteca y también útil para preguntas generales simples.";
+  }
+
+  // General, non-LMS intents
+  if (hasAny(["clima", "weather"])) {
+    return "No tengo acceso a clima en tiempo real, pero puedes verlo rápido en tu app del clima o en Google con tu ciudad.";
+  }
+  if (hasAny(["hora", "fecha", "dia", "día"])) {
+    return "No leo el reloj del dispositivo desde aquí, pero si quieres te ayudo con tu siguiente paso en el LMS.";
+  }
+  if (hasAny(["que es ia", "qué es ia", "inteligencia artificial"])) {
+    return "La IA es tecnología que aprende patrones para responder, predecir o generar contenido en tareas concretas.";
+  }
+  if (hasAny(["como estudiar mejor", "cómo estudiar mejor", "tecnicas de estudio", "técnicas de estudio"])) {
+    return "Tip rápido: estudia en bloques cortos, practica con preguntas y repasa en varios días para fijar memoria.";
+  }
+  if ((q.includes("resum") || q.includes("resúm")) && (q.includes("3 puntos") || q.includes("tres puntos"))) {
+    return "Claro. Pega el texto y te lo resumo en 3 puntos clave.";
+  }
+
+  // Open fallback feels like chatbot, not strict rules.
+  if (!isLmsQuery && isQuestion) {
+    return pick([
+      "No tengo esa información específica en este momento, pero puedo ayudarte con una respuesta breve si me das más contexto.",
+      "No estoy conectado a datos en tiempo real para eso. Si quieres, lo intentamos con una versión más general.",
+      "Esa sí se me sale un poco de alcance ahora mismo; te puedo dar una orientación rápida si me dices exactamente qué necesitas.",
+    ]);
+  }
+  if (isLmsQuery) {
+    return "Puedo ayudarte con eso dentro del LMS. Dime si buscas catálogo, préstamo, renovación o multas y te doy la ruta exacta.";
+  }
+  return pick([
+    "Entiendo. Si quieres, te respondo corto y claro.",
+    "Va, te ayudo. Dime tu objetivo en una frase y te doy una respuesta directa.",
+  ]);
 }
 
 const LMS_SYSTEM_PROMPT = `
