@@ -777,6 +777,67 @@ app.put("/examples/:barcode/damage-details", async (req, res) => {
   } finally { client.release(); }
 });
 // ─────────────────────────────────────────────────────────────────────────────
+// PERIODICAL METADATA
+// ─────────────────────────────────────────────────────────────────────────────
+app.get("/resources/:id/periodical-metadata", async (req, res) => {
+  try {
+    const id = Number(req.params.id);
+    const r = await query(
+      `SELECT pm.*, r.resource_title 
+       FROM periodical_metadata pm 
+       JOIN resources r ON r.resource_id = pm.resource_id 
+       WHERE pm.resource_id = $1`, [id]
+    );
+    if (!r.rows.length) return res.status(404).json({ message: "Metadatos de publicación periódica no encontrados" });
+    res.json(r.rows[0]);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.put("/resources/:id/periodical-metadata", async (req, res) => {
+  try {
+    const id = Number(req.params.id);
+    let { periodical_issn, periodical_frequency, peer_reviewed } = req.body;
+    
+    // validation
+    if (periodical_issn) {
+      periodical_issn = periodical_issn.replace(/-/g, '').trim();
+      if (periodical_issn.length > 8) {
+        return res.status(400).json({ message: "El ISSN no debe exceder 8 caracteres." });
+      }
+    } else {
+      periodical_issn = null;
+    }
+    
+    if (!periodical_frequency) {
+      return res.status(400).json({ message: "Frecuencia de publicación requerida." });
+    }
+    
+    const validFrequencies = ['daily', 'weekly', 'monthly', 'quarterly', 'annually'];
+    if (!validFrequencies.includes(periodical_frequency)) {
+      return res.status(400).json({ message: "Frecuencia de publicación inválida." });
+    }
+
+    const r = await query(
+      `INSERT INTO periodical_metadata(resource_id, periodical_issn, periodical_frequency, peer_reviewed)
+       VALUES($1, $2, $3, $4)
+       ON CONFLICT (resource_id) DO UPDATE SET
+         periodical_issn = EXCLUDED.periodical_issn,
+         periodical_frequency = EXCLUDED.periodical_frequency,
+         peer_reviewed = EXCLUDED.peer_reviewed
+       RETURNING *`,
+      [id, periodical_issn, periodical_frequency, Boolean(peer_reviewed)]
+    );
+    res.json(r.rows[0]);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
 // DIGITAL RESOURCES
 // ─────────────────────────────────────────────────────────────────────────────
 const DIGITAL_MAX_RENEWALS = 3;

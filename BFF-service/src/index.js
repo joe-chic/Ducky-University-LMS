@@ -448,6 +448,27 @@ app.put("/api/resources/:id/digital-metadata", async (req, res) => {
   }
 });
 
+// ── Periodical resource endpoints ─────────────────────────────────────────────
+app.get("/api/resources/:id/periodical-metadata", async (req, res) => {
+  try {
+    const r = await axios.get(`${LIBRARY_BASE_URL}/resources/${req.params.id}/periodical-metadata`, { timeout: 8000 });
+    res.json(r.data);
+  } catch (err) {
+    res.status(err?.response?.status || 500).json({ message: err?.response?.data?.message || "Error al obtener metadatos de publicación periódica" });
+  }
+});
+
+app.put("/api/resources/:id/periodical-metadata", async (req, res) => {
+  try {
+    const r = await axios.put(`${LIBRARY_BASE_URL}/resources/${req.params.id}/periodical-metadata`, req.body, {
+      headers: { "Content-Type": "application/json" }, timeout: 8000,
+    });
+    res.json(r.data);
+  } catch (err) {
+    res.status(err?.response?.status || 500).json({ message: err?.response?.data?.message || "Error al actualizar metadatos de publicación periódica" });
+  }
+});
+
 app.get("/api/resources/:id/digital-status", async (req, res) => {
   try {
     const r = await axios.get(`${LIBRARY_BASE_URL}/resources/${req.params.id}/digital-status`, { timeout: 8000 });

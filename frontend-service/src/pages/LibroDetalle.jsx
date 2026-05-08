@@ -320,6 +320,7 @@ function LibroDetalle() {
   const isDigitalDownloadable = libro => ["e_book", "digital_article"].includes(libro?.tipo);
   const isDigitalCollection = libro => ["e_journal", "e_magazine"].includes(libro?.tipo);
   const isDigital = libro => isDigitalDownloadable(libro) || isDigitalCollection(libro);
+  const isPeriodical = libro => ["e_journal", "e_magazine", "journal_magazine"].includes(libro?.tipo);
 
   // ── Digital metadata state & fetch ──────────────────────────────────────────
   const [digitalMeta,   setDigitalMeta]   = useState(null);
@@ -344,6 +345,22 @@ function LibroDetalle() {
     });
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [libro, id, campusId]);
+
+  // ── Periodical metadata state & fetch ───────────────────────────────────────
+  const [periodicalMeta, setPeriodicalMeta] = useState(null);
+  const [editingPM,      setEditingPM]      = useState(false);
+  const [pmForm,         setPmForm]         = useState({});
+
+  useEffect(() => {
+    if (!libro || !isPeriodical(libro)) return;
+    const token = getToken();
+    bffGet(`/api/resources/${id}/periodical-metadata`, { token })
+      .then(meta => {
+        setPeriodicalMeta(meta);
+        if (meta) setPmForm({ ...meta });
+      })
+      .catch(() => null);
+  }, [libro, id]);
 
   const handleDescarga = async () => {
     if (!campusId) { setMsg({ type: "error", text: "No se encontró tu ID de campus. Vuelve a iniciar sesión." }); return; }
@@ -384,6 +401,17 @@ function LibroDetalle() {
       setDigitalMeta(updated);
       setEditingDM(false);
       setMsg({ type: "success", text: "Metadatos digitales actualizados." });
+    } catch (err) { setMsg({ type: "error", text: err.message }); }
+  };
+
+  const handleSavePM = async (e) => {
+    e.preventDefault();
+    try {
+      const token = getToken();
+      const updated = await bffPut(`/api/resources/${id}/periodical-metadata`, pmForm, { token });
+      setPeriodicalMeta(updated);
+      setEditingPM(false);
+      setMsg({ type: "success", text: "Metadatos de publicación actualizados." });
     } catch (err) { setMsg({ type: "error", text: err.message }); }
   };
 
@@ -619,6 +647,58 @@ function LibroDetalle() {
                           <label style={{ fontWeight: 600, fontSize: "0.85rem" }}>Máx. Usuarios Totales
                             <input type="number" style={{ display:"block", width:"100%", marginTop:"4px", padding:"6px 8px", borderRadius:"5px", border:"1px solid #ccc" }}
                               value={dmForm.digital_total_users_allows || ""} onChange={e => setDmForm(f => ({ ...f, digital_total_users_allows: Number(e.target.value) }))} />
+                          </label>
+                          <div style={{ gridColumn: "1/-1" }}>
+                            <button type="submit" className="libro-btn-prestamo" style={{ marginRight:"8px" }}>Guardar Cambios</button>
+                          </div>
+                        </form>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* ── PERIODICAL METADATA PANEL (periodicals only) ── */}
+              {isPeriodical(libro) && (
+                <div className="libro-ubicacion" style={{ marginTop: "24px" }}>
+                  <h3>Detalles de Publicación Periódica</h3>
+                  {periodicalMeta ? (
+                    <div style={{ display: "flex", gap: "12px", flexWrap: "wrap", marginTop: "12px" }}>
+                      {[
+                        ["🪪 ISSN", periodicalMeta.periodical_issn || "—"],
+                        ["🗓 Frecuencia", periodicalMeta.periodical_frequency],
+                        ["✅ Peer Reviewed", periodicalMeta.peer_reviewed ? "Sí" : "No"],
+                      ].map(([label, val]) => (
+                        <div key={label} style={{ background: "#f8f9fa", borderRadius: "8px", padding: "10px 12px", border: "1px solid #e0e0e0" }}>
+                          <div style={{ fontSize: "0.72rem", color: "#888", marginBottom: "2px" }}>{label}</div>
+                          <div style={{ fontWeight: 600, fontSize: "0.9rem", textTransform: "capitalize" }}>{val}</div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : <p style={{ color: "#aaa" }}>Sin metadatos de publicación periódica registrados.</p>}
+
+                  {/* Admin/Lib: periodical metadata editor */}
+                  {hasManagementRole && (
+                    <div style={{ marginTop: "12px" }}>
+                      <button className="libro-btn-editar" onClick={() => setEditingPM(v => !v)} style={{ marginBottom: "8px" }}>
+                        {editingPM ? "Cancelar edición" : "✏️ Editar Metadatos Periódicos"}
+                      </button>
+                      {editingPM && (
+                        <form onSubmit={handleSavePM} style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px", background: "#f0f4ff", borderRadius: "10px", padding: "16px" }}>
+                          <label style={{ fontWeight: 600, fontSize: "0.85rem" }}>ISSN
+                            <input style={{ display:"block", width:"100%", marginTop:"4px", padding:"6px 8px", borderRadius:"5px", border:"1px solid #ccc", fontSize:"0.85rem" }}
+                              value={pmForm.periodical_issn || ""} onChange={e => setPmForm(f => ({ ...f, periodical_issn: e.target.value }))} maxLength={10} placeholder="Ej: 1234-567X" />
+                          </label>
+                          <label style={{ fontWeight: 600, fontSize: "0.85rem" }}>Frecuencia
+                            <select style={{ display:"block", width:"100%", marginTop:"4px", padding:"6px 8px", borderRadius:"5px", border:"1px solid #ccc" }}
+                              value={pmForm.periodical_frequency || ""} onChange={e => setPmForm(f => ({ ...f, periodical_frequency: e.target.value }))} required>
+                              <option value="" disabled>Seleccione...</option>
+                              {["daily","weekly","monthly","quarterly","annually"].map(v => <option key={v} value={v}>{v}</option>)}
+                            </select>
+                          </label>
+                          <label style={{ fontWeight: 600, fontSize: "0.85rem", gridColumn: "1/-1", display: "flex", alignItems: "center", gap: "8px" }}>
+                            <input type="checkbox" checked={pmForm.peer_reviewed || false} onChange={e => setPmForm(f => ({ ...f, peer_reviewed: e.target.checked }))} />
+                            ¿Es Peer-Reviewed?
                           </label>
                           <div style={{ gridColumn: "1/-1" }}>
                             <button type="submit" className="libro-btn-prestamo" style={{ marginRight:"8px" }}>Guardar Cambios</button>
