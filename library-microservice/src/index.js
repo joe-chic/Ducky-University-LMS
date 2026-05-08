@@ -351,6 +351,16 @@ app.put("/resources/:id", async (req, res) => {
       [titulo, tipo, state, ano_publicacion || null, costo || 0, autor_id || null, editorial_id || null, id]
     );
 
+    if (state === 'disabled' && ['e_journal', 'e_magazine', 'journal_magazine'].includes(tipo)) {
+       await client.query(
+          `UPDATE resources SET resource_state = 'disabled', disabled_at = NOW(), latest_modified_at = NOW() 
+           WHERE resource_id IN (
+              SELECT resource_child_id FROM digital_articles WHERE resource_parent_id = $1
+           )`,
+          [id]
+       );
+    }
+
     if (tipo === 'book') {
        await client.query(`INSERT INTO book_metadata(resource_id, book_isbn, book_edition_number, book_synopsis) VALUES ($1, $2, $3, $4) ON CONFLICT (resource_id) DO UPDATE SET book_isbn = $2, book_edition_number = $3, book_synopsis = $4`, [id, isbn || null, edicion || null, sinopsis || null]);
     } else {
@@ -392,6 +402,16 @@ app.delete("/resources/:id", async (req, res) => {
       `UPDATE resources
        SET resource_state = 'disabled', disabled_at = NOW(), latest_modified_at = NOW()
        WHERE resource_id = $1`,
+      [id]
+    );
+    
+    // Cascade disable to digital article children
+    await query(
+      `UPDATE resources
+       SET resource_state = 'disabled', disabled_at = NOW(), latest_modified_at = NOW()
+       WHERE resource_id IN (
+          SELECT resource_child_id FROM digital_articles WHERE resource_parent_id = $1
+       )`,
       [id]
     );
     res.json({ ok: true });
