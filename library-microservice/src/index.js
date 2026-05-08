@@ -133,6 +133,14 @@ app.get("/resources", async (req, res) => {
 
     const totalRes = await query(
       `SELECT COUNT(DISTINCT r.resource_id)::int AS total
+,
+          av.audiovisual_minutes AS audiovisual_minutes,
+          mm.maps_scale AS maps_scale,
+          mm.maps_projection_type AS maps_projection_type,
+          mm.maps_type AS maps_type,
+          rl.language_id AS lenguaje_principal_id,
+          pm_self.periodical_frequency AS self_journal_frequency,
+          pm_self.peer_reviewed AS self_journal_peer_reviewed
        FROM resources r
        LEFT JOIN collaborators c ON c.colaborator_id = r.author_principal_id
        LEFT JOIN organizations o ON o.organization_id = r.publisher_id
@@ -180,8 +188,14 @@ app.get("/resources", async (req, res) => {
        LEFT JOIN physical_examples pe ON pe.resource_id = r.resource_id
        LEFT JOIN digital_metadata dm ON dm.resource_id = r.resource_id
        LEFT JOIN images im ON im.resource_id = r.resource_id
+       LEFT JOIN audiovisual_metadata av ON av.resource_id = r.resource_id
+       LEFT JOIN maps_metadata mm ON mm.resource_id = r.resource_id
+       LEFT JOIN resource_labels rl ON rl.resource_id = r.resource_id AND rl.resource_is_primary = true
        ${whereSql}
-       GROUP BY r.resource_id, c.first_name, c.middle_name, c.father_lastname, c.mother_lastname, c.colaborator_id, o.organization_name, o.organization_id, r.resource_state, r.resource_type, r.resource_publication_year, r.resource_cost, bm.book_isbn, bm.book_edition_number, bm.book_synopsis, dm.digital_url_link
+       GROUP BY r.resource_id, c.first_name, c.middle_name, c.father_lastname, c.mother_lastname, c.colaborator_id, o.organization_name, o.organization_id, r.resource_state, r.resource_type, r.resource_publication_year, r.resource_cost, bm.book_isbn, bm.book_edition_number, bm.book_synopsis, dm.digital_url_link,
+               da.resource_parent_id, rj.resource_title, pm.periodical_issn, pm.periodical_frequency, pm.peer_reviewed,
+               da.digital_article_issue, da.digital_article_volume, da.digital_article_year, pm_self.periodical_issn,
+               av.audiovisual_minutes, mm.maps_scale, mm.maps_projection_type, mm.maps_type, rl.language_id, pm_self.periodical_frequency, pm_self.peer_reviewed
        ${sort === "recent" ? "ORDER BY r.resource_id DESC" : "ORDER BY r.resource_title ASC, r.resource_id ASC"}
        LIMIT $${params.length + 1} OFFSET $${params.length + 2}`,
       [...params, pageSize, offset]
@@ -261,7 +275,8 @@ app.get("/resources/:id", async (req, res) => {
                 bm.book_edition_number, bm.book_synopsis, da.resource_parent_id, rj.resource_title,
                 pm.periodical_issn, pm.periodical_frequency, pm.peer_reviewed,
                 da.digital_article_issue, da.digital_article_volume, da.digital_article_year,
-                pm_self.periodical_issn, dm.digital_url_link`,
+                pm_self.periodical_issn, dm.digital_url_link,
+                 av.audiovisual_minutes, mm.maps_scale, mm.maps_projection_type, mm.maps_type, rl.language_id, pm_self.periodical_frequency, pm_self.peer_reviewed`,
       [id]
     );
 
@@ -269,6 +284,16 @@ app.get("/resources/:id", async (req, res) => {
     const row = result.rows[0];
     const dto = resourceRowToDto(row);
     // Attach journal fields for digital_article (not covered by resourceRowToDto)
+    if (['e_journal', 'e_magazine', 'journal_magazine'].includes(row.tipo)) {
+      dto.journal_issn = row.self_issn;
+      dto.journal_frequency = row.self_journal_frequency;
+      dto.journal_peer_reviewed = row.self_journal_peer_reviewed;
+    }
+    dto.audiovisual_minutes = row.audiovisual_minutes;
+    dto.maps_scale = row.maps_scale;
+    dto.maps_projection_type = row.maps_projection_type;
+    dto.maps_type = row.maps_type;
+    dto.lenguaje_principal_id = row.lenguaje_principal_id;
     if (row.journal_id) {
       dto.journal_id            = row.journal_id;
       dto.journal_title         = row.journal_title;
@@ -294,24 +319,59 @@ app.post("/resources", async (req, res) => {
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
-    const { titulo, tipo, disponible, ano_publicacion, costo, autor_id, editorial_id, generos_ids, lenguajes_ids, isbn, edicion, sinopsis } = req.body || {};
+    const {
+      titulo, tipo, disponible, ano_publicacion, costo,
+      autor_id, nuevo_autor, editorial_id, nueva_editorial,
+      generos_ids, lenguajes_ids, lenguaje_principal_id,
+      isbn, edicion, sinopsis,
+      journal_issn, journal_frequency, journal_peer_reviewed,
+      journal_id, article_issue, article_volume, article_year,
+      audiovisual_minutes, maps_scale, maps_projection_type, maps_type
+    } = req.body || {};
     if (!titulo || !tipo) return res.status(400).json({ message: "Title and type are required" });
     
     await client.query(`SELECT setval('resources_resource_id_seq', COALESCE((SELECT MAX(resource_id) FROM resources), 1))`);
     
     const state = disponible ? 'available' : 'disabled';
     
+    let final_autor_id = autor_id || null;
+    if (nuevo_autor && nuevo_autor.trim()) {
+      const parts = nuevo_autor.trim().split(' ');
+      const resColab = await client.query(`INSERT INTO collaborators(first_name, father_lastname, nationality_id) VALUES($1, $2, 1) RETURNING colaborator_id`, [parts[0], parts.slice(1).join(' ') || null]);
+      final_autor_id = resColab.rows[0].colaborator_id;
+    }
+    let final_editorial_id = editorial_id || null;
+    if (nueva_editorial && nueva_editorial.trim()) {
+      const resOrg = await client.query(`INSERT INTO organizations(organization_name, country_id) VALUES($1, 1) RETURNING organization_id`, [nueva_editorial.trim()]);
+      final_editorial_id = resOrg.rows[0].organization_id;
+    }
+    
     const insertRes = await client.query(
       `INSERT INTO resources(
         resource_title, resource_type, resource_state, resource_publication_year, resource_cost, author_principal_id, publisher_id,
         created_at, created_by, latest_modified_at, latest_modified_by
        ) VALUES ($1, $2, $3, $4, $5, $6, $7, NOW(), 1, NOW(), 1) RETURNING resource_id`,
-      [titulo, tipo, state, ano_publicacion || null, costo || 0, autor_id || null, editorial_id || null]
+      [titulo, tipo, state, ano_publicacion || null, costo || 0, final_autor_id, final_editorial_id]
     );
     const resource_id = insertRes.rows[0].resource_id;
 
     if (tipo === 'book' && (isbn || edicion || sinopsis)) {
        await client.query(`INSERT INTO book_metadata(resource_id, book_isbn, book_edition_number, book_synopsis) VALUES ($1, $2, $3, $4)`, [resource_id, isbn || null, edicion || null, sinopsis || null]);
+    }
+    if (['e_journal', 'e_magazine', 'journal_magazine'].includes(tipo)) {
+       await client.query(`INSERT INTO periodical_metadata(resource_id, periodical_issn, periodical_frequency, peer_reviewed) VALUES ($1, $2, $3, $4)`, [resource_id, journal_issn || null, journal_frequency || 'monthly', journal_peer_reviewed || false]);
+    }
+    if (['e_article', 'digital_article'].includes(tipo) && journal_id) {
+       await client.query(`INSERT INTO digital_articles(resource_child_id, resource_parent_id, digital_article_issue, digital_article_volume, digital_article_year) VALUES ($1, $2, $3, $4, $5)`, [resource_id, journal_id, article_issue || null, article_volume || null, article_year || null]);
+    }
+    if (['video', 'audio_music'].includes(tipo) && audiovisual_minutes) {
+       await client.query(`INSERT INTO audiovisual_metadata(resource_id, audiovisual_minutes) VALUES ($1, $2)`, [resource_id, audiovisual_minutes]);
+    }
+    if (tipo === 'map') {
+       await client.query(`INSERT INTO maps_metadata(resource_id, maps_scale, maps_projection_type, maps_type) VALUES ($1, $2, $3, $4)`, [resource_id, maps_scale || null, maps_projection_type || null, maps_type || null]);
+    }
+    if (lenguaje_principal_id) {
+       await client.query(`INSERT INTO resource_labels(resource_id, language_id, resource_title, resource_is_primary) VALUES ($1, $2, $3, true)`, [resource_id, lenguaje_principal_id, titulo]);
     }
 
     if (Array.isArray(generos_ids) && generos_ids.length > 0) {
@@ -344,17 +404,37 @@ app.put("/resources/:id", async (req, res) => {
     await client.query('BEGIN');
     const id = Number(req.params.id);
     if (!id) return res.status(400).json({ message: "Invalid id" });
-    const { titulo, tipo, disponible, ano_publicacion, costo, autor_id, editorial_id, generos_ids, lenguajes_ids, isbn, edicion, sinopsis } = req.body || {};
+    const {
+      titulo, tipo, disponible, ano_publicacion, costo,
+      autor_id, nuevo_autor, editorial_id, nueva_editorial,
+      generos_ids, lenguajes_ids, lenguaje_principal_id,
+      isbn, edicion, sinopsis,
+      journal_issn, journal_frequency, journal_peer_reviewed,
+      journal_id, article_issue, article_volume, article_year,
+      audiovisual_minutes, maps_scale, maps_projection_type, maps_type
+    } = req.body || {};
     if (!titulo || !tipo) return res.status(400).json({ message: "Title and type are required" });
     
     const state = disponible ? 'available' : 'disabled';
     
+    let final_autor_id = autor_id || null;
+    if (nuevo_autor && nuevo_autor.trim()) {
+      const parts = nuevo_autor.trim().split(' ');
+      const resColab = await client.query(`INSERT INTO collaborators(first_name, father_lastname, nationality_id) VALUES($1, $2, 1) RETURNING colaborator_id`, [parts[0], parts.slice(1).join(' ') || null]);
+      final_autor_id = resColab.rows[0].colaborator_id;
+    }
+    let final_editorial_id = editorial_id || null;
+    if (nueva_editorial && nueva_editorial.trim()) {
+      const resOrg = await client.query(`INSERT INTO organizations(organization_name, country_id) VALUES($1, 1) RETURNING organization_id`, [nueva_editorial.trim()]);
+      final_editorial_id = resOrg.rows[0].organization_id;
+    }
+    
     await client.query(
       `UPDATE resources
-       SET resource_title = $1, resource_type = $2, resource_state = $3, 
+       SET resource_title = $1, resource_state = $3, 
            resource_publication_year = $4, resource_cost = $5, author_principal_id = $6, publisher_id = $7, latest_modified_at = NOW()
        WHERE resource_id = $8`,
-      [titulo, tipo, state, ano_publicacion || null, costo || 0, autor_id || null, editorial_id || null, id]
+      [titulo, tipo, state, ano_publicacion || null, costo || 0, final_autor_id, final_editorial_id, id]
     );
 
     if (state === 'disabled' && ['e_journal', 'e_magazine', 'journal_magazine'].includes(tipo)) {
@@ -369,8 +449,23 @@ app.put("/resources/:id", async (req, res) => {
 
     if (tipo === 'book') {
        await client.query(`INSERT INTO book_metadata(resource_id, book_isbn, book_edition_number, book_synopsis) VALUES ($1, $2, $3, $4) ON CONFLICT (resource_id) DO UPDATE SET book_isbn = $2, book_edition_number = $3, book_synopsis = $4`, [id, isbn || null, edicion || null, sinopsis || null]);
-    } else {
-       await client.query(`DELETE FROM book_metadata WHERE resource_id = $1`, [id]);
+    }
+    if (['e_journal', 'e_magazine', 'journal_magazine'].includes(tipo)) {
+       await client.query(`INSERT INTO periodical_metadata(resource_id, periodical_issn, periodical_frequency, peer_reviewed) VALUES ($1, $2, $3, $4) ON CONFLICT (resource_id) DO UPDATE SET periodical_issn = EXCLUDED.periodical_issn, periodical_frequency = EXCLUDED.periodical_frequency, peer_reviewed = EXCLUDED.peer_reviewed`, [id, journal_issn || null, journal_frequency || 'monthly', journal_peer_reviewed || false]);
+    }
+    if (['e_article', 'digital_article'].includes(tipo) && journal_id) {
+       await client.query(`INSERT INTO digital_articles(resource_child_id, resource_parent_id, digital_article_issue, digital_article_volume, digital_article_year) VALUES ($1, $2, $3, $4, $5) ON CONFLICT (resource_child_id) DO UPDATE SET resource_parent_id = EXCLUDED.resource_parent_id, digital_article_issue = EXCLUDED.digital_article_issue, digital_article_volume = EXCLUDED.digital_article_volume, digital_article_year = EXCLUDED.digital_article_year`, [id, journal_id, article_issue || null, article_volume || null, article_year || null]);
+    }
+    if (['video', 'audio_music'].includes(tipo) && audiovisual_minutes) {
+       await client.query(`INSERT INTO audiovisual_metadata(resource_id, audiovisual_minutes) VALUES ($1, $2) ON CONFLICT (resource_id) DO UPDATE SET audiovisual_minutes = EXCLUDED.audiovisual_minutes`, [id, audiovisual_minutes]);
+    }
+    if (tipo === 'map') {
+       await client.query(`INSERT INTO maps_metadata(resource_id, maps_scale, maps_projection_type, maps_type) VALUES ($1, $2, $3, $4) ON CONFLICT (resource_id) DO UPDATE SET maps_scale = EXCLUDED.maps_scale, maps_projection_type = EXCLUDED.maps_projection_type, maps_type = EXCLUDED.maps_type`, [id, maps_scale || null, maps_projection_type || null, maps_type || null]);
+    }
+
+    await client.query(`DELETE FROM resource_labels WHERE resource_id = $1 AND resource_is_primary = true`, [id]);
+    if (lenguaje_principal_id) {
+       await client.query(`INSERT INTO resource_labels(resource_id, language_id, resource_title, resource_is_primary) VALUES ($1, $2, $3, true)`, [id, lenguaje_principal_id, titulo]);
     }
 
     await client.query(`DELETE FROM categories_resources WHERE resource_id = $1`, [id]);
