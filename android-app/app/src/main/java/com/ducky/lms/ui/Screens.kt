@@ -4,6 +4,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.*
@@ -118,12 +119,28 @@ fun HomeScreen(navController: NavController) {
     var errorMsg by remember { mutableStateOf("") }
     val coroutineScope = rememberCoroutineScope()
 
-    LaunchedEffect(search) {
+    var page by remember { mutableStateOf(1) }
+    var selectedFilter by remember { mutableStateOf("") }
+    val pageSize = 10
+
+    val filterOptions = listOf(
+        "" to "Todos",
+        "book" to "Libros",
+        "e_book" to "E-Books",
+        "journal_magazine" to "Revistas Físicas",
+        "e_journal" to "Revistas Electrónicas",
+        "digital_article" to "Artículos",
+        "map" to "Mapas",
+        "video" to "Videos",
+        "audio_music" to "Audio/Música"
+    )
+
+    LaunchedEffect(search, page, selectedFilter) {
         loading = true
         errorMsg = ""
         try {
-            val resp = RetrofitClient.apiService.getResources("Bearer ${Session.token}", search = search, pageSize = 50)
-            resources = resp.items
+            val resp = RetrofitClient.apiService.getResources("Bearer ${Session.token}", search = search, tipo = selectedFilter, page = page, pageSize = pageSize)
+            resources = resp.items.sortedBy { it.titulo.lowercase() }
             totalResources = resp.total
         } catch (e: Exception) {
             errorMsg = "API Falló: ${e.message}"
@@ -136,31 +153,51 @@ fun HomeScreen(navController: NavController) {
         topBar = { 
             TopAppBar(
                 title = { Text("Catálogo de Recursos", fontWeight = FontWeight.Bold) },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = DuckyYellow, titleContentColor = DuckyDark)
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = DuckyYellow, titleContentColor = DuckyDark),
+                actions = {
+                    TextButton(onClick = {
+                        Session.token = ""
+                        Session.role = ""
+                        navController.navigate("login") {
+                            popUpTo("home") { inclusive = true }
+                        }
+                    }) {
+                        Text("Salir", fontWeight = FontWeight.Bold, color = DuckyDark)
+                    }
+                }
             ) 
-        },
-        floatingActionButton = {
-           ExtendedFloatingActionButton(
-               onClick = {
-                   Session.token = ""
-                   Session.role = ""
-                   navController.navigate("login") {
-                       popUpTo("home") { inclusive = true }
-                   }
-               },
-               containerColor = DuckyDark,
-               contentColor = Color.White
-           ) { Text("Cerrar Sesión") }
         }
     ) { padding ->
         Column(modifier = Modifier.padding(padding).fillMaxSize().background(DuckyLightGray).padding(16.dp)) {
             OutlinedTextField(
                 value = search,
-                onValueChange = { search = it },
+                onValueChange = { search = it; page = 1 },
                 label = { Text("Buscar título o autor...") },
-                modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp),
+                modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp),
                 colors = TextFieldDefaults.outlinedTextFieldColors(containerColor = Color.White, focusedBorderColor = DuckyDark, cursorColor = DuckyDark)
             )
+
+            LazyRow(modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp)) {
+                items(filterOptions) { (key, label) ->
+                    val isSelected = selectedFilter == key
+                    Surface(
+                        modifier = Modifier
+                            .padding(end = 8.dp)
+                            .clickable { selectedFilter = key; page = 1 },
+                        shape = MaterialTheme.shapes.small,
+                        color = if (isSelected) DuckyDark else Color.White,
+                        border = if (!isSelected) androidx.compose.foundation.BorderStroke(1.dp, DuckyDark) else null
+                    ) {
+                        Text(
+                            text = label,
+                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                            color = if (isSelected) Color.White else DuckyDark,
+                            fontWeight = FontWeight.Bold,
+                            style = MaterialTheme.typography.bodySmall
+                        )
+                    }
+                }
+            }
 
             if (loading) {
                 Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
@@ -175,12 +212,29 @@ fun HomeScreen(navController: NavController) {
                     Text("No se encontraron recursos.", color = Color.Gray)
                 }
             } else {
-                Text(text = "Mostrando ${resources.size} de $totalResources registrados", color = Color.Gray, style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(bottom = 8.dp))
-                LazyColumn(modifier = Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 80.dp) /* fab padding */) {
+                val totalPages = if (totalResources == 0) 1 else (totalResources + pageSize - 1) / pageSize
+                Text(text = "Mostrando ${resources.size} de $totalResources registrados (Página $page de $totalPages)", color = Color.Gray, style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(bottom = 8.dp))
+                LazyColumn(modifier = Modifier.weight(1f)) {
                     items(resources) { res ->
                         ResourceCard(res)
                         Spacer(modifier = Modifier.height(12.dp))
                     }
+                }
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Button(
+                        onClick = { if (page > 1) page-- },
+                        enabled = page > 1,
+                        colors = ButtonDefaults.buttonColors(containerColor = DuckyDark)
+                    ) { Text("Anterior") }
+                    Button(
+                        onClick = { if (page < totalPages) page++ },
+                        enabled = page < totalPages,
+                        colors = ButtonDefaults.buttonColors(containerColor = DuckyDark)
+                    ) { Text("Siguiente") }
                 }
             }
         }
@@ -230,7 +284,47 @@ fun ResourceCard(resource: ResourceDto) {
                 
                 Text(text = "Autor:", fontWeight = FontWeight.Bold, color = DuckyDark, style = MaterialTheme.typography.bodySmall)
                 Text(text = resource.autor ?: "Desconocido", color = Color.Gray, style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(bottom = 4.dp))
-                
+
+                if (!resource.editorial.isNullOrEmpty()) {
+                    Text(text = "Editorial:", fontWeight = FontWeight.Bold, color = DuckyDark, style = MaterialTheme.typography.bodySmall)
+                    Text(text = resource.editorial, color = Color.Gray, style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(bottom = 4.dp))
+                }
+                if (resource.ano_publicacion != null) {
+                    Text(text = "Año de publicación:", fontWeight = FontWeight.Bold, color = DuckyDark, style = MaterialTheme.typography.bodySmall)
+                    Text(text = resource.ano_publicacion.toString(), color = Color.Gray, style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(bottom = 4.dp))
+                }
+                if (!resource.isbn.isNullOrEmpty()) {
+                    Text(text = "ISBN:", fontWeight = FontWeight.Bold, color = DuckyDark, style = MaterialTheme.typography.bodySmall)
+                    Text(text = resource.isbn, color = Color.Gray, style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(bottom = 4.dp))
+                }
+                if (!resource.journal_issn.isNullOrEmpty()) {
+                    Text(text = "ISSN:", fontWeight = FontWeight.Bold, color = DuckyDark, style = MaterialTheme.typography.bodySmall)
+                    Text(text = resource.journal_issn, color = Color.Gray, style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(bottom = 4.dp))
+                }
+                if (!resource.maps_scale.isNullOrEmpty()) {
+                    Text(text = "Escala de Mapa:", fontWeight = FontWeight.Bold, color = DuckyDark, style = MaterialTheme.typography.bodySmall)
+                    Text(text = resource.maps_scale, color = Color.Gray, style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(bottom = 4.dp))
+                }
+                if (!resource.maps_type.isNullOrEmpty()) {
+                    Text(text = "Tipo de Mapa:", fontWeight = FontWeight.Bold, color = DuckyDark, style = MaterialTheme.typography.bodySmall)
+                    Text(text = resource.maps_type, color = Color.Gray, style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(bottom = 4.dp))
+                }
+                if (resource.audiovisual_minutes != null) {
+                    Text(text = "Duración (minutos):", fontWeight = FontWeight.Bold, color = DuckyDark, style = MaterialTheme.typography.bodySmall)
+                    Text(text = "${resource.audiovisual_minutes} min", color = Color.Gray, style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(bottom = 4.dp))
+                }
+                if (resource.article_volume != null) {
+                    Text(text = "Volumen:", fontWeight = FontWeight.Bold, color = DuckyDark, style = MaterialTheme.typography.bodySmall)
+                    Text(text = resource.article_volume.toString(), color = Color.Gray, style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(bottom = 4.dp))
+                }
+                if (!resource.lenguajes.isNullOrEmpty()) {
+                    Text(text = "Lenguajes:", fontWeight = FontWeight.Bold, color = DuckyDark, style = MaterialTheme.typography.bodySmall)
+                    Text(text = resource.lenguajes, color = Color.Gray, style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(bottom = 4.dp))
+                }
+                if (!resource.sinopsis.isNullOrEmpty()) {
+                    Text(text = "Sinopsis:", fontWeight = FontWeight.Bold, color = DuckyDark, style = MaterialTheme.typography.bodySmall)
+                    Text(text = resource.sinopsis, color = Color.Gray, style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(bottom = 4.dp))
+                }
             }
         }
     }

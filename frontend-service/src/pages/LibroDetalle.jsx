@@ -10,7 +10,9 @@ import { bffGet, bffPut, bffPost, getToken } from "../api/bff";
 // ── EjemplarRow ───────────────────────────────────────────────────────────────
 // Renders one physical example row. Management users get an expandable panel
 // with full damage/lost detail and an inline editor.
-function EjemplarRow({ ej, badgeColor, badgeLabel, healthColor, hasManagementRole, token }) {
+const WITHDRAWN_OP_STATE = "internal consultation only";
+
+function EjemplarRow({ ej, badgeColor, badgeLabel, healthColor, hasManagementRole, token, resourceId, onExampleUpdated }) {
   const [open,        setOpen]        = useState(false);
   const [detail,      setDetail]      = useState(null);
   const [loading,     setLoading]     = useState(false);
@@ -18,6 +20,7 @@ function EjemplarRow({ ej, badgeColor, badgeLabel, healthColor, hasManagementRol
   const [form,        setForm]        = useState({});
   const [saving,      setSaving]      = useState(false);
   const [rowMsg,      setRowMsg]      = useState(null);
+  const [circPending, setCircPending] = useState(false);
 
   const DAMAGE_TYPES = [
     "torn pages","foxing","cockling","dog-eared","staining/decoloration",
@@ -57,6 +60,38 @@ function EjemplarRow({ ej, badgeColor, badgeLabel, healthColor, hasManagementRol
     finally      { setSaving(false); }
   }
 
+  async function toggleEjemplarCirculacion() {
+    if (!resourceId || !ej.barcode) return;
+    const op = ej.example_op_state;
+    const isWithdrawn = op === WITHDRAWN_OP_STATE;
+    if (!isWithdrawn && op === "on loan") {
+      setRowMsg("No se puede retirar de circulación un ejemplar que está en préstamo.");
+      return;
+    }
+    const nextOp = isWithdrawn ? "available" : WITHDRAWN_OP_STATE;
+    const accion = isWithdrawn ? "volver a dejar en circulación" : "retirar de circulación (solo consulta interna)";
+    if (!window.confirm(`¿Seguro que deseas ${accion} este ejemplar (${ej.barcode})?`)) return;
+    setCircPending(true);
+    setRowMsg(null);
+    try {
+      await bffPut(
+        `/api/resources/${resourceId}/examples/${encodeURIComponent(ej.barcode)}`,
+        {
+          location_code: ej.example_location_code,
+          health_state: ej.example_health_state,
+          op_state: nextOp,
+        },
+        { token }
+      );
+      onExampleUpdated?.();
+      setRowMsg("✓ Ejemplar actualizado.");
+    } catch (err) {
+      setRowMsg(err.message || "Error al actualizar el ejemplar.");
+    } finally {
+      setCircPending(false);
+    }
+  }
+
   const cellStyle  = { padding: "8px 12px", color: "#555" };
   const monoStyle  = { padding: "8px 12px", fontFamily: "monospace", fontSize: "0.85rem", color: "#333" };
 
@@ -77,6 +112,30 @@ function EjemplarRow({ ej, badgeColor, badgeLabel, healthColor, hasManagementRol
         </td>
         {hasManagementRole && (
           <td style={cellStyle}>
+            {ej.example_op_state === "on loan" ? (
+              <span style={{ fontSize: "0.78rem", color: "#888" }}>En préstamo</span>
+            ) : (
+              <button
+                type="button"
+                onClick={toggleEjemplarCirculacion}
+                disabled={circPending}
+                style={{
+                  padding: "4px 10px",
+                  fontSize: "0.78rem",
+                  border: "1px solid #bbb",
+                  borderRadius: "5px",
+                  cursor: circPending ? "wait" : "pointer",
+                  background: ej.example_op_state === WITHDRAWN_OP_STATE ? "#e8f5e9" : "#fff3e0",
+                  fontWeight: 600,
+                }}
+              >
+                {circPending ? "…" : ej.example_op_state === WITHDRAWN_OP_STATE ? "Restaurar circulación" : "Retirar circulación"}
+              </button>
+            )}
+          </td>
+        )}
+        {hasManagementRole && (
+          <td style={cellStyle}>
             <button
               onClick={toggleDetail}
               style={{ padding: "4px 10px", fontSize: "0.78rem", border: "1px solid #bbb", borderRadius: "5px", cursor: "pointer", background: open ? "#e8eaf6" : "#f5f5f5" }}
@@ -90,7 +149,7 @@ function EjemplarRow({ ej, badgeColor, badgeLabel, healthColor, hasManagementRol
       {/* Expandable damage detail panel */}
       {hasManagementRole && open && (
         <tr>
-          <td colSpan={5} style={{ padding: "0 12px 16px 12px", background: "#fafbff", borderBottom: "2px solid #e3e8f0" }}>
+          <td colSpan={6} style={{ padding: "0 12px 16px 12px", background: "#fafbff", borderBottom: "2px solid #e3e8f0" }}>
             {loading && <p style={{ color: "#888", fontSize: "0.85rem" }}>Cargando…</p>}
             {rowMsg  && <p style={{ color: rowMsg.startsWith("✓") ? "#2e7d32" : "#c62828", fontSize: "0.82rem", margin: "6px 0" }}>{rowMsg}</p>}
             {detail && !loading && (
@@ -305,11 +364,11 @@ function LibroDetalle() {
     if (!window.confirm(`¿Seguro que deseas ${accion} este libro?`)) return;
     try {
       const token = getToken();
-      await bffPut(`/api/resources/${id}`, { ...libro, disponible: !libro.disponible }, { token });
+      await bffPut(`/api/resources/${id}/toggle-state`, { disponible: !libro.disponible }, { token });
       setLibro(prev => ({ ...prev, disponible: !prev.disponible }));
       setMsg({ type: "success", text: `Libro ${accion === "deshabilitar" ? "deshabilitado" : "habilitado"} correctamente.` });
-    } catch {
-      setMsg({ type: "error", text: "Error al cambiar el estado del libro." });
+    } catch (err) {
+      setMsg({ type: "error", text: err.message || "Error al cambiar el estado del libro." });
     }
   };
 
@@ -562,13 +621,19 @@ function LibroDetalle() {
                             <th style={{ padding: "8px 12px", textAlign: "left", fontWeight: 600, color: "#555" }}>Ubicación</th>
                             {hasManagementRole && <th style={{ padding: "8px 12px", textAlign: "left", fontWeight: 600, color: "#555" }}>Estado Físico</th>}
                             <th style={{ padding: "8px 12px", textAlign: "left", fontWeight: 600, color: "#555" }}>Disponibilidad</th>
+                            {hasManagementRole && <th style={{ padding: "8px 12px", textAlign: "left", fontWeight: 600, color: "#555" }}>Circulación</th>}
                             {hasManagementRole && <th style={{ padding: "8px 12px", textAlign: "left", fontWeight: 600, color: "#555" }}>Detalle</th>}
                           </tr>
                         </thead>
                         <tbody>
                           {ejemplares.map((ej, i) => {
                             const opState = ej.example_op_state;
-                            const badgeColor = opState === "available" ? "#2E8B57" : opState === "on loan" ? "#b71c1c" : "#795548";
+                            const badgeColor =
+                              opState === "available" ? "#2E8B57"
+                              : opState === "on loan" ? "#b71c1c"
+                              : opState === "reserved" ? "#1565c0"
+                              : opState === "internal consultation only" ? "#6a1b9a"
+                              : "#795548";
                             const badgeLabel = opState === "available" ? "Disponible" : opState === "on loan" ? "En Préstamo" : opState === "reserved" ? "Reservado" : opState === "internal consultation only" ? "Consulta Interna" : "En Tránsito";
                             const healthColor = ej.example_health_state === "good" ? "#2e7d32" : ej.example_health_state === "damaged" ? "#e65100" : ej.example_health_state === "lost" ? "#b71c1c" : "#666";
                             return (
@@ -580,8 +645,8 @@ function LibroDetalle() {
                                 healthColor={healthColor}
                                 hasManagementRole={hasManagementRole}
                                 token={getToken()}
-                                bffGet={bffGet}
-                                bffPut={bffPut}
+                                resourceId={id}
+                                onExampleUpdated={fetchLibro}
                               />
                             );
                           })}

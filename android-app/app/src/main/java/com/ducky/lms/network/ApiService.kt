@@ -14,7 +14,23 @@ data class ResourceDto(
     val autor: String?,
     val tipo: String,
     val disponible: Boolean,
-    val ubicacion: String?
+    val ubicacion: String?,
+    val isbn: String?,
+    val issn: String?,
+    val editorial: String?,
+    val ano_publicacion: Int?,
+    val sinopsis: String?,
+    val lenguajes: String?,
+    val journal_issn: String?,
+    val journal_frequency: String?,
+    val maps_scale: String?,
+    val maps_projection_type: String?,
+    val maps_type: String?,
+    val audiovisual_minutes: Int?,
+    val article_year: Int?,
+    val article_volume: Int?,
+    val article_issue: Int?,
+    val portada: String?
 )
 data class ResourcesResponse(val items: List<ResourceDto>, val total: Int)
 
@@ -26,6 +42,8 @@ interface ApiService {
     suspend fun getResources(
         @Header("Authorization") token: String,
         @Query("search") search: String = "",
+        @Query("tipo") tipo: String = "",
+        @Query("sort") sort: String = "",
         @Query("page") page: Int = 1,
         @Query("pageSize") pageSize: Int = 50
     ): ResourcesResponse

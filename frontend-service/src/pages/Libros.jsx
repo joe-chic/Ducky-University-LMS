@@ -213,7 +213,7 @@ function Libros() {
     if (!window.confirm(`¿Seguro que deseas ${accion} este recurso?`)) return;
     try {
       const token = getToken();
-      await bffPut(`/api/resources/${recurso.id}`, { ...recurso, disponible: !recurso.disponible }, { token });
+      await bffPut(`/api/resources/${recurso.id}/toggle-state`, { disponible: !recurso.disponible }, { token });
       setRecursos(prev => prev.map(r => r.id === recurso.id ? { ...r, disponible: !recurso.disponible } : r));
     } catch {
       alert(`Error al ${accion} el recurso`);
