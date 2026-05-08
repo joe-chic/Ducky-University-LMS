@@ -246,37 +246,122 @@ app.post("/api/loans", async (req, res) => {
   }
 });
 
-// PUT /api/loans/:id/return  — return loan + auto-create fine if overdue
+async function getReasonCodeId(reasonType) {
+  try {
+    const reasonsRes = await axios.get(`${TREASURY_BASE_URL}/api/reason_codes`, { params: { page: 1 }, timeout: 10_000 });
+    const items = reasonsRes.data?.items || [];
+    const match = items.find((r) => r.reason_type === reasonType);
+    if (match?.code_id) return match.code_id;
+  } catch (_err) {}
+  const fallbackByType = { late_return: 1, damage: 2, loss: 3, other: 4 };
+  return fallbackByType[reasonType] || 4;
+}
+
 app.put("/api/loans/:id/return", async (req, res) => {
   try {
-    const returnRes = await axios.put(`${LIBRARY_BASE_URL}/loans/${req.params.id}/return`, {}, {
-      timeout: 10_000,
-    });
-    const data = returnRes.data;
+    const loanId = Number(req.params.id);
+    if (!loanId) return res.status(400).json({ message: "ID de préstamo inválido." });
 
-    // If overdue: register a fine in treasury (fire-and-keep-response)
-    if (data.fine_amount > 0) {
-      axios.post(`${TREASURY_BASE_URL}/fines`, {
-        price:                data.fine_amount,
-        reason_code_id:      1,   // LR-001 late_return
-        source_system:       "library",
-        source_transaction_id: `loan-${data.loan_id}`,
-        offender_id:         data.campus_id,
-        offender_type:       "student",
-      }, { timeout: 10_000 }).catch(e =>
-        console.warn("[bff] treasury fine registration failed:", e.message)
+    const {
+      return_condition = "good",
+      damage_fee = 50,
+      damage_notes = "",
+      damage_type = "damaged cover",
+      severity_level = "low",
+    } = req.body || {};
+
+    // 1) Return in library and get computed late info.
+    const libRes = await axios.put(
+      `${LIBRARY_BASE_URL}/loans/${loanId}/return`,
+      { return_condition, librarian_notes: damage_notes, damage_type, severity_level },
+      { headers: { "Content-Type": "application/json" }, timeout: 10_000 }
+    );
+    const payload = libRes.data || {};
+
+    // 2) Collect offender details (from users system).
+    const campusId = payload.campus_id;
+    let offenderName = "";
+    let offenderEmail = "";
+    if (campusId) {
+      try {
+        const userRes = await axios.get(`${USERS_BASE_URL}/users/${campusId}/by-campus`, { timeout: 10_000 });
+        offenderName = userRes.data?.nombre || "";
+        offenderEmail = userRes.data?.email || "";
+      } catch (_err) {}
+    }
+
+    // 3) Generate fines in treasury (late and/or damage).
+    const finesGenerated = [];
+    const createFine = async ({ amount, reasonType, sourceTx, reasonLabel }) => {
+      if (!amount || Number(amount) <= 0 || !campusId) return;
+      const reasonCodeId = await getReasonCodeId(reasonType);
+      const fineRes = await axios.post(
+        `${TREASURY_BASE_URL}/fines`,
+        {
+          price: Number(amount),
+          reason_code_id: reasonCodeId,
+          source_system: "library",
+          source_transaction_id: sourceTx,
+          offender_id: campusId,
+          offender_type: "student",
+        },
+        { headers: { "Content-Type": "application/json" }, timeout: 10_000 }
       );
+      finesGenerated.push({
+        id: fineRes.data?.find_id,
+        amount: Number(amount),
+        reason_type: reasonType,
+        reason: reasonLabel,
+      });
+    };
 
-      return res.json({
-        ...data,
-        message: `Se registró una multa de $${data.fine_amount} MXN por ${data.overdue_days} día(s) de retraso. Paga en tesoría antes de tu próximo préstamo.`,
+    if (Number(payload.late_fine_amount || 0) > 0) {
+      await createFine({
+        amount: Number(payload.late_fine_amount),
+        reasonType: "late_return",
+        sourceTx: `loan-${loanId}-late`,
+        reasonLabel: "Devolución tardía",
       });
     }
 
-    res.json({ ...data, message: "Libro devuelto correctamente. ¡Gracias!" });
+    if (return_condition === "damaged") {
+      await createFine({
+        amount: Number(damage_fee) > 0 ? Number(damage_fee) : 50,
+        reasonType: "damage",
+        sourceTx: `loan-${loanId}-damage`,
+        reasonLabel: "Devolución en mal estado",
+      });
+    }
+
+    const notices = [];
+    if (finesGenerated.some((f) => f.reason_type === "late_return")) {
+      notices.push("Multa generada por entrega tardía.");
+    }
+    if (finesGenerated.some((f) => f.reason_type === "damage")) {
+      notices.push("Multa generada por devolución en mal estado.");
+    }
+
+    return res.json({
+      ok: true,
+      message: "Devolución exitosa",
+      notice: notices.join(" "),
+      receipt: {
+        loan_id: payload.loan_id || loanId,
+        returned_at: payload.returned_at,
+        due_date: payload.due_date,
+        campus_id: campusId,
+        barcode: payload.barcode,
+        titulo: payload.titulo,
+        offender_name: offenderName,
+        offender_email: offenderEmail,
+      },
+      fines: finesGenerated,
+    });
   } catch (err) {
     const status = err?.response?.status || 500;
-    res.status(status).json({ message: err?.response?.data?.message || "Error al registrar la devolución." });
+    return res.status(status).json({
+      message: err?.response?.data?.message || err?.message || "Error al registrar la devolución",
+    });
   }
 });
 

@@ -353,13 +353,13 @@ async function submitForm(e) {
 }
 
 async function deleteRecord(id) {
-  if (!confirm('Delete this record? This cannot be undone.')) return;
+  if (!confirm('¿Confirmas desactivar/eliminar este registro?')) return;
   const cfg = TABLES[currentTable];
   try {
     const r = await fetch(`${BFF}${cfg.endpoint}/${id}`, { method: 'DELETE' });
     const d = await r.json();
-    if (!r.ok) throw new Error(d.error || 'Delete failed');
-    toast('✓ Record deleted', 'success');
+    if (!r.ok) throw new Error(d.message || d.error || 'Delete failed');
+    toast(d.soft_deleted ? '✓ Registro desactivado' : '✓ Record deleted', 'success');
     loadData();
   } catch(e) { toast('✗ ' + e.message, 'error'); }
 }

@@ -760,6 +760,30 @@ app.listen(PORT, () => {
 // -------------------------------------------------------------
 // PRÉSTAMOS Y DEVOLUCIONES
 // -------------------------------------------------------------
+function addBusinessDays(date, days) {
+  const result = new Date(date);
+  let added = 0;
+  while (added < days) {
+    result.setDate(result.getDate() + 1);
+    const dow = result.getDay();
+    if (dow !== 0 && dow !== 6) added++;
+  }
+  return result;
+}
+
+function businessDaysBetween(start, end) {
+  let count = 0;
+  const cur = new Date(start);
+  cur.setHours(0, 0, 0, 0);
+  const fin = new Date(end);
+  fin.setHours(0, 0, 0, 0);
+  while (cur < fin) {
+    cur.setDate(cur.getDate() + 1);
+    const dow = cur.getDay();
+    if (dow !== 0 && dow !== 6) count++;
+  }
+  return count;
+}
 
 // Helper: add N business days to a date (skips Sat/Sun)
 function addBusinessDays(date, days) {
@@ -908,9 +932,10 @@ app.put("/loans/:id/return", async (req, res) => {
   try {
     await client.query("BEGIN");
     const loan_id = Number(req.params.id);
+    const { return_condition, damage_type, severity_level, librarian_notes } = req.body || {};
     const loan = await client.query(
       `SELECT pl.barcode, pl.loan_state, pl.initial_lent_at, pl.campus_id, pl.returned_at,
-              r.resource_title, pe.example_location_code
+              r.resource_title AS titulo
        FROM physical_loans pl
        JOIN physical_examples pe ON pe.barcode = pl.barcode
        JOIN resources r ON r.resource_id = pe.resource_id
@@ -922,37 +947,66 @@ app.put("/loans/:id/return", async (req, res) => {
       return res.status(409).json({ message: "El préstamo ya fue completado o devuelto" });
 
     const returnedAt = new Date();
-    const loanedAt  = new Date(loan.rows[0].initial_lent_at);
-    const dueDate   = addBusinessDays(loanedAt, 5);
+    const loanedAt = new Date(loan.rows[0].initial_lent_at);
+    const dueDate = addBusinessDays(loanedAt, 5);
     const overdueDays = returnedAt > dueDate ? businessDaysBetween(dueDate, returnedAt) : 0;
-    const DAILY_FINE  = 5.00; // $5 MXN per business day
-    const fineAmount  = overdueDays > 0 ? +(overdueDays * DAILY_FINE).toFixed(2) : 0;
-    const finalState  = 'completed';
+    const DAILY_FINE = 5.0; // $5 MXN per business day
+    const fineAmount = overdueDays > 0 ? +(overdueDays * DAILY_FINE).toFixed(2) : 0;
 
     await client.query(
       `UPDATE physical_loans
        SET loan_state = $1, returned_at = $2, latest_modified_at = NOW()
        WHERE loan_id = $3`,
-      [finalState, returnedAt, loan_id]
+      ["completed", returnedAt, loan_id]
     );
+
+    if (return_condition === "damaged") {
+      await client.query(
+        `UPDATE physical_examples
+         SET example_health_state = 'damaged', example_op_state = 'available', latest_modified_at = NOW()
+         WHERE barcode = $1`,
+        [loan.rows[0].barcode]
+      );
+      await client.query(
+        `INSERT INTO damaged_resource_details(barcode, damage_type, severity_level, librarian_notes)
+         VALUES($1, $2, $3, $4)
+         ON CONFLICT(barcode) DO UPDATE SET
+           damage_type = EXCLUDED.damage_type,
+           severity_level = EXCLUDED.severity_level,
+           librarian_notes = EXCLUDED.librarian_notes`,
+        [
+          loan.rows[0].barcode,
+          damage_type || "damaged cover",
+          severity_level || "low",
+          librarian_notes || "Registrado en devolución",
+        ]
+      );
+      await client.query(`DELETE FROM lost_resource_details WHERE barcode = $1`, [loan.rows[0].barcode]);
+    } else {
+      await client.query(`DELETE FROM damaged_resource_details WHERE barcode = $1`, [loan.rows[0].barcode]);
+      await client.query(`DELETE FROM lost_resource_details WHERE barcode = $1`, [loan.rows[0].barcode]);
+    }
+
     await client.query(
       `UPDATE physical_examples SET example_op_state = 'available', latest_modified_at = NOW() WHERE barcode = $1`,
       [loan.rows[0].barcode]
     );
 
     await client.query("COMMIT");
-
     res.json({
       ok: true,
       loan_id,
+      campus_id: loan.rows[0].campus_id,
+      barcode: loan.rows[0].barcode,
+      titulo: loan.rows[0].titulo,
+      returned_at: returnedAt,
+      due_date: dueDate,
       overdue_days: overdueDays,
       fine_amount: fineAmount,
-      fine_currency: 'MXN',
-      due_date: dueDate,
-      returned_at: returnedAt,
-      // Include enough context for the BFF to create the fine in treasury
-      campus_id:  loan.rows[0].campus_id,
-      titulo:     loan.rows[0].resource_title,
+      fine_currency: "MXN",
+      late_fine_amount: fineAmount,
+      late_fine_currency: "MXN",
+      return_condition: return_condition || "good",
     });
   } catch (err) {
     await client.query("ROLLBACK");
