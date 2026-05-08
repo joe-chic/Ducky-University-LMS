@@ -28,7 +28,7 @@
 // =============================================================================
 
 import { useState, useRef, useEffect } from "react";
-import { getToken } from "../api/bff";
+import { bffPost, getToken } from "../api/bff";
 import "./ChatbotPanel.css";
 import duckIcon from "../assets/icons/icon-duck.png";
 
@@ -108,48 +108,34 @@ export default function ChatbotPanel({ isOpen, onClose }) {
     setInput("");
     setTyping(true);
 
-    // -------------------------------------------------------------------------
-    // TODO: descomentar cuando el chatbot-microservice y Ollama estén listos
-    // -------------------------------------------------------------------------
-    // try {
-    //   const token = getToken();
-    //   const res = await fetch(`${process.env.REACT_APP_BFF_URL}/api/chatbot/message`, {
-    //     method: "POST",
-    //     headers: {
-    //       "Content-Type": "application/json",
-    //       Authorization: `Bearer ${token}`,
-    //     },
-    //     body: JSON.stringify({
-    //       message: trimmed,
-    //       history: messages.map(m => ({ role: m.role, text: m.text })),
-    //     }),
-    //   });
-    //   const data = await res.json();
-    //   if (!res.ok) throw new Error(data.message || "Error del chatbot");
-    //   const botMsg = { id: (Date.now() + 1).toString(), role: "bot", text: data.reply, time: new Date() };
-    //   setMessages(prev => [...prev, botMsg]);
-    // } catch (err) {
-    //   const errMsg = {
-    //     id: (Date.now() + 1).toString(), role: "bot",
-    //     text: "Lo siento, hubo un error al conectar con el asistente. Intenta de nuevo. 🙏",
-    //     time: new Date(),
-    //   };
-    //   setMessages(prev => [...prev, errMsg]);
-    // } finally {
-    //   setTyping(false);
-    // }
-
-    // Respuesta mock mientras el servicio no está listo
-    setTimeout(() => {
+    try {
+      const token = getToken();
+      const data = await bffPost(
+        "/api/chatbot/message",
+        {
+          message: trimmed,
+          history: [...messages, userMsg].map((m) => ({ role: m.role, text: m.text })),
+        },
+        { token }
+      );
       const botMsg = {
         id: (Date.now() + 1).toString(),
         role: "bot",
-        text: "El servicio de chatbot está siendo configurado con Ollama 🔧\nProto podrás hacer preguntas sobre libros, préstamos, multas y más. 📚",
+        text: data?.reply || "No pude generar una respuesta en este momento.",
         time: new Date(),
       };
-      setMessages(prev => [...prev, botMsg]);
+      setMessages((prev) => [...prev, botMsg]);
+    } catch (_err) {
+      const errMsg = {
+        id: (Date.now() + 1).toString(),
+        role: "bot",
+        text: "Lo siento, hubo un error al conectar con el asistente. Intenta de nuevo. 🙏",
+        time: new Date(),
+      };
+      setMessages((prev) => [...prev, errMsg]);
+    } finally {
       setTyping(false);
-    }, 1000);
+    }
   };
 
   const handleKeyDown = (e) => {

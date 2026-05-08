@@ -111,9 +111,11 @@ services:
       USERS_BASE_URL: http://users-microservice:3001
       LIBRARY_BASE_URL: http://library-microservice:3002
       TREASURY_BASE_URL: http://treasury-microservice:3007
+      CHATBOT_BASE_URL: http://chatbot-microservice:4005
     depends_on:
       - users-microservice
       - library-microservice
+      - chatbot-microservice
     ports:
       - "4000:4000"
     hostname: bff.ducky.local
@@ -350,3 +352,37 @@ services:
     depends_on: [treasury-bff-service]
     ports: ["3008:3008"]
     hostname: treasury.ducky.local
+
+  ollama:
+    image: ollama/ollama:latest
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama_data:/root/.ollama
+
+  ollama-init:
+    image: ollama/ollama:latest
+    depends_on:
+      - ollama
+    entrypoint: ["/bin/sh", "-c"]
+    command: >
+      "sleep 6;
+      ollama pull qwen2.5:1.5b || true"
+    volumes:
+      - ollama_data:/root/.ollama
+    restart: "no"
+
+  chatbot-microservice:
+    build: ./chatbot-microservice
+    environment:
+      PORT: 4005
+      OLLAMA_URL: http://ollama:11434
+      OLLAMA_MODEL: qwen2.5:1.5b
+    depends_on:
+      - ollama
+      - ollama-init
+    ports:
+      - "4005:4005"
+
+volumes:
+  ollama_data:
