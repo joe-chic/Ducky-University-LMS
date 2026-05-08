@@ -316,8 +316,10 @@ function LibroDetalle() {
   const disponibles = ejemplares.filter(e => e.example_op_state === "available").length;
   const enPrestamo  = ejemplares.filter(e => e.example_op_state === "on loan").length;
 
-  // Only digital resources (e-books and digital articles) can be requested online.
-  const isDigital = libro => ["e_book", "digital_article", "e_journal"].includes(libro?.tipo);
+  // Only specific digital resources can be downloaded and have digital metadata.
+  const isDigitalDownloadable = libro => ["e_book", "digital_article"].includes(libro?.tipo);
+  const isDigitalCollection = libro => ["e_journal", "e_magazine"].includes(libro?.tipo);
+  const isDigital = libro => isDigitalDownloadable(libro) || isDigitalCollection(libro);
 
   // ── Digital metadata state & fetch ──────────────────────────────────────────
   const [digitalMeta,   setDigitalMeta]   = useState(null);
@@ -328,7 +330,7 @@ function LibroDetalle() {
   const [activeLoanId,  setActiveLoanId]  = useState(null);
 
   useEffect(() => {
-    if (!libro || !isDigital(libro)) return;
+    if (!libro || !isDigitalDownloadable(libro)) return;
     const token = getToken();
     Promise.all([
       bffGet(`/api/resources/${id}/digital-metadata`, { token }).catch(() => null),
@@ -530,8 +532,8 @@ function LibroDetalle() {
                 </div>
               )}
 
-              {/* ── DIGITAL METADATA PANEL (digital resources only) ── */}
-              {isDigital(libro) && (
+              {/* Digital Metadata section - ONLY for downloadable digital resources */}
+              {isDigitalDownloadable(libro) && (
                 <div className="libro-ubicacion">
                   <h3>Acceso Digital</h3>
                   {digitalMeta ? (
@@ -634,7 +636,7 @@ function LibroDetalle() {
               <div className="libro-acciones">
 
                 {/* Digital: download button for students */}
-                {isAlumno && isDigital(libro) && (
+                {isAlumno && isDigitalDownloadable(libro) && (
                   <>
                     {digitalStatus?.can_access ? (
                       <button className="libro-btn-prestamo" onClick={handleDescarga} disabled={loadingDescarga}>
