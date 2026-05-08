@@ -14,6 +14,7 @@ const PORT = process.env.PORT ? Number(process.env.PORT) : 4000;
 const USERS_BASE_URL = process.env.USERS_BASE_URL || "http://users-microservice:3001";
 const LIBRARY_BASE_URL = process.env.LIBRARY_BASE_URL || "http://library-microservice:3002";
 const TREASURY_BASE_URL = process.env.TREASURY_BASE_URL || "http://treasury-microservice:3007";
+const CHATBOT_BASE_URL = process.env.CHATBOT_BASE_URL || "http://chatbot-microservice:4005";
 
 function normalizeFineListPayload(data) {
   if (Array.isArray(data)) return data;
@@ -485,6 +486,33 @@ app.post("/api/fines/reconcile-campus/:campus_id", async (req, res) => {
 app.post("/api/library-fines/reconcile", async (_req, res) => {
   const result = await reconcileLibraryFinesSanctions();
   res.json({ ok: true, ...result });
+});
+
+// CHATBOT proxy (Ollama-backed assistant)
+app.post("/api/chatbot/message", async (req, res) => {
+  try {
+    const { message, history } = req.body || {};
+    if (!message || !String(message).trim()) {
+      return res.status(400).json({ message: "message es requerido." });
+    }
+    const response = await axios.post(
+      `${CHATBOT_BASE_URL}/chat`,
+      {
+        message: String(message),
+        history: Array.isArray(history) ? history : [],
+      },
+      {
+        headers: { "Content-Type": "application/json" },
+        timeout: 30_000,
+      }
+    );
+    return res.json(response.data);
+  } catch (err) {
+    const status = err?.response?.status || 500;
+    return res.status(status).json({
+      message: err?.response?.data?.message || "Chatbot service error",
+    });
+  }
 });
 
 // ── Combined physical + digital loans ────────────────────────────────────────

@@ -111,9 +111,11 @@ services:
       USERS_BASE_URL: http://users-microservice:3001
       LIBRARY_BASE_URL: http://library-microservice:3002
       TREASURY_BASE_URL: http://treasury-microservice:3007
+      CHATBOT_BASE_URL: http://chatbot-microservice:4005
     depends_on:
       - users-microservice
       - library-microservice
+      - chatbot-microservice
     ports:
       - "4000:4000"
     hostname: bff.ducky.local
@@ -350,3 +352,24 @@ services:
     depends_on: [treasury-bff-service]
     ports: ["3008:3008"]
     hostname: treasury.ducky.local
+
+  ollama:
+    image: ollama/ollama:latest
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama_data:/root/.ollama
+
+  chatbot-microservice:
+    build: ./chatbot-microservice
+    environment:
+      PORT: 4005
+      OLLAMA_URL: http://ollama:11434
+      OLLAMA_MODEL: tinyllama
+    depends_on:
+      - ollama
+    ports:
+      - "4005:4005"
+
+volumes:
+  ollama_data:

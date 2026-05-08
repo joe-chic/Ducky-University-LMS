@@ -44,7 +44,6 @@ function Sidebar({ isOpen, onClose }) {
             {hasManagementRole && item("Prestamos y multas", "/prestamos", true)}
             {!hasManagementRole && item("Mis Prestamos", "/mis-prestamos", true)}
             {!hasManagementRole && item("Devoluciones", "/devoluciones", true)}
-            {!hasManagementRole && item("Soporte", "/soporte", true)}
           </div>
         </>
       )}
