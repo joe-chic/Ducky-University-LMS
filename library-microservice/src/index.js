@@ -392,6 +392,39 @@ app.put("/resources/:id", async (req, res) => {
   }
 });
 
+// PUT /resources/:id/toggle-state
+app.put("/resources/:id/toggle-state", async (req, res) => {
+  try {
+    const id = Number(req.params.id);
+    const { disponible } = req.body;
+    if (!id) return res.status(400).json({ message: "Invalid id" });
+    const state = disponible ? 'available' : 'disabled';
+    
+    await query(
+      `UPDATE resources
+       SET resource_state = $1, disabled_at = CASE WHEN $1 = 'disabled' THEN NOW() ELSE NULL END, latest_modified_at = NOW()
+       WHERE resource_id = $2`,
+      [state, id]
+    );
+
+    // Cascade disable to digital article children if disabling
+    if (state === 'disabled') {
+       await query(
+          `UPDATE resources SET resource_state = 'disabled', disabled_at = NOW(), latest_modified_at = NOW() 
+           WHERE resource_id IN (
+              SELECT resource_child_id FROM digital_articles WHERE resource_parent_id = $1
+           )`,
+          [id]
+       );
+    }
+    
+    res.json({ ok: true });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: "Failed to toggle state" });
+  }
+});
+
 // DELETE /resources/:id (Disable resource)
 app.delete("/resources/:id", async (req, res) => {
   try {
@@ -806,6 +839,30 @@ app.put("/examples/:barcode/damage-details", async (req, res) => {
     res.status(500).json({ error: err.message });
   } finally { client.release(); }
 });
+// ─────────────────────────────────────────────────────────────────────────────
+// ARTICLES (For Journals/Magazines)
+// ─────────────────────────────────────────────────────────────────────────────
+app.get("/resources/:id/articles", async (req, res) => {
+  try {
+    const id = Number(req.params.id);
+    const r = await query(
+      `SELECT r.resource_id, r.resource_title, r.resource_state,
+              da.digital_article_issue, da.digital_article_volume, da.digital_article_year,
+              (CASE WHEN dm.digital_url_link IS NULL OR TRIM(dm.digital_url_link) = '' THEN false ELSE (r.resource_state = 'available') END) AS disponible
+       FROM digital_articles da
+       JOIN resources r ON r.resource_id = da.resource_child_id
+       LEFT JOIN digital_metadata dm ON dm.resource_id = da.resource_child_id
+       WHERE da.resource_parent_id = $1
+       ORDER BY da.digital_article_year DESC, da.digital_article_volume DESC, da.digital_article_issue DESC, r.resource_title ASC`,
+       [id]
+    );
+    res.json(r.rows);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // ─────────────────────────────────────────────────────────────────────────────
 // PERIODICAL METADATA
 // ─────────────────────────────────────────────────────────────────────────────

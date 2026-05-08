@@ -349,19 +349,23 @@ function LibroDetalle() {
   }, [libro, id, campusId]);
 
   // ── Periodical metadata state & fetch ───────────────────────────────────────
-  const [periodicalMeta, setPeriodicalMeta] = useState(null);
-  const [editingPM,      setEditingPM]      = useState(false);
-  const [pmForm,         setPmForm]         = useState({});
+  const [periodicalMeta,     setPeriodicalMeta]     = useState(null);
+  const [editingPM,          setEditingPM]          = useState(false);
+  const [pmForm,             setPmForm]             = useState({});
+  const [periodicalArticles, setPeriodicalArticles] = useState([]);
+  const [articlesPage,       setArticlesPage]       = useState(1);
 
   useEffect(() => {
     if (!libro || !isPeriodical(libro)) return;
     const token = getToken();
-    bffGet(`/api/resources/${id}/periodical-metadata`, { token })
-      .then(meta => {
-        setPeriodicalMeta(meta);
-        if (meta) setPmForm({ ...meta });
-      })
-      .catch(() => null);
+    Promise.all([
+      bffGet(`/api/resources/${id}/periodical-metadata`, { token }).catch(() => null),
+      bffGet(`/api/resources/${id}/articles`, { token }).catch(() => [])
+    ]).then(([meta, arts]) => {
+      setPeriodicalMeta(meta);
+      if (meta) setPmForm({ ...meta });
+      setPeriodicalArticles(Array.isArray(arts) ? arts : []);
+    });
   }, [libro, id]);
 
   const handleDescarga = async () => {
@@ -415,6 +419,20 @@ function LibroDetalle() {
       setEditingPM(false);
       setMsg({ type: "success", text: "Metadatos de publicación actualizados." });
     } catch (err) { setMsg({ type: "error", text: err.message }); }
+  };
+
+  const handleToggleArticleState = async (articleId, isCurrentlyAvailable) => {
+    if (!window.confirm(`¿Seguro que deseas ${isCurrentlyAvailable ? "deshabilitar" : "habilitar"} este artículo?`)) return;
+    try {
+      const token = getToken();
+      await bffPut(`/api/resources/${articleId}/toggle-state`, { disponible: !isCurrentlyAvailable }, { token });
+      setPeriodicalArticles(prev => prev.map(a => 
+        a.resource_id === articleId ? { ...a, disponible: !isCurrentlyAvailable } : a
+      ));
+      setMsg({ type: "success", text: "Estado del artículo actualizado." });
+    } catch (err) {
+      setMsg({ type: "error", text: err.message || "Error al cambiar estado del artículo" });
+    }
   };
 
   let isAvailable = libro?.disponible;
@@ -687,7 +705,6 @@ function LibroDetalle() {
                     </div>
                   ) : <p style={{ color: "#aaa" }}>Sin metadatos de publicación periódica registrados.</p>}
 
-                  {/* Admin/Lib: periodical metadata editor */}
                   {hasManagementRole && (
                     <div style={{ marginTop: "12px" }}>
                       <button className="libro-btn-editar" onClick={() => setEditingPM(v => !v)} style={{ marginBottom: "8px" }}>
@@ -714,6 +731,71 @@ function LibroDetalle() {
                             <button type="submit" className="libro-btn-prestamo" style={{ marginRight:"8px" }}>Guardar Cambios</button>
                           </div>
                         </form>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* ── ASSOCIATED ARTICLES (periodicals only) ── */}
+              {isPeriodical(libro) && (
+                <div className="libro-ubicacion" style={{ marginTop: "24px" }}>
+                  <h3>Artículos Asociados</h3>
+                  {periodicalArticles.length === 0 ? (
+                    <p style={{ color: "#aaa" }}>No hay artículos asociados a esta publicación.</p>
+                  ) : (
+                    <div>
+                      <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "0.87rem", marginTop: "12px" }}>
+                        <thead>
+                          <tr style={{ background: "#f5f5f5", borderBottom: "2px solid #e0e0e0" }}>
+                            <th style={{ padding: "8px 12px", textAlign: "left", fontWeight: 600, color: "#555" }}>Título</th>
+                            <th style={{ padding: "8px 12px", textAlign: "left", fontWeight: 600, color: "#555" }}>Año/Vol/Iss</th>
+                            {hasManagementRole && <th style={{ padding: "8px 12px", textAlign: "center", fontWeight: 600, color: "#555" }}>Estado</th>}
+                            <th style={{ padding: "8px 12px", textAlign: "center", fontWeight: 600, color: "#555" }}>Acciones</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {periodicalArticles.slice((articlesPage - 1) * 10, articlesPage * 10).map(art => (
+                            <tr key={art.resource_id} style={{ borderBottom: "1px solid #e0e0e0" }}>
+                              <td style={{ padding: "8px 12px" }}>{art.resource_title}</td>
+                              <td style={{ padding: "8px 12px" }}>
+                                {art.digital_article_year || "?"} / Vol {art.digital_article_volume || "?"} / Iss {art.digital_article_issue || "?"}
+                              </td>
+                              {hasManagementRole && (
+                                <td style={{ padding: "8px 12px", textAlign: "center" }}>
+                                  <span style={{ color: art.disponible ? "#2e7d32" : "#c62828", fontWeight: "bold" }}>
+                                    {art.disponible ? "Disponible" : "Deshabilitado"}
+                                  </span>
+                                </td>
+                              )}
+                              <td style={{ padding: "8px 12px", textAlign: "center" }}>
+                                <button onClick={() => navigate(`/libros/${art.resource_id}`)}
+                                        style={{ background: "#4caf50", color: "#fff", border: "none", padding: "4px 8px", borderRadius: "4px", cursor: "pointer", fontSize: "0.75rem", marginRight: "6px" }}>
+                                  Ver Detalle
+                                </button>
+                                {hasManagementRole && (
+                                  <button onClick={() => handleToggleArticleState(art.resource_id, art.disponible)}
+                                          style={{ background: art.disponible ? "#f44336" : "#2196f3", color: "#fff", border: "none", padding: "4px 8px", borderRadius: "4px", cursor: "pointer", fontSize: "0.75rem" }}>
+                                    {art.disponible ? "Deshabilitar" : "Habilitar"}
+                                  </button>
+                                )}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                      {periodicalArticles.length > 10 && (
+                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: "16px" }}>
+                          <button onClick={() => setArticlesPage(p => Math.max(1, p - 1))} disabled={articlesPage === 1}
+                                  style={{ padding: "6px 12px", borderRadius: "6px", border: "1px solid #ccc", background: articlesPage === 1 ? "#eee" : "#fff", cursor: articlesPage === 1 ? "not-allowed" : "pointer" }}>
+                            Anterior
+                          </button>
+                          <span style={{ fontSize: "0.85rem", color: "#555" }}>Página {articlesPage} de {Math.ceil(periodicalArticles.length / 10)}</span>
+                          <button onClick={() => setArticlesPage(p => Math.min(Math.ceil(periodicalArticles.length / 10), p + 1))} disabled={articlesPage === Math.ceil(periodicalArticles.length / 10)}
+                                  style={{ padding: "6px 12px", borderRadius: "6px", border: "1px solid #ccc", background: articlesPage === Math.ceil(periodicalArticles.length / 10) ? "#eee" : "#fff", cursor: articlesPage === Math.ceil(periodicalArticles.length / 10) ? "not-allowed" : "pointer" }}>
+                            Siguiente
+                          </button>
+                        </div>
                       )}
                     </div>
                   )}

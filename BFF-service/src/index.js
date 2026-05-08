@@ -458,6 +458,24 @@ app.get("/api/resources/:id/periodical-metadata", async (req, res) => {
   }
 });
 
+app.get("/api/resources/:id/articles", async (req, res) => {
+  try {
+    const r = await axios.get(`${LIBRARY_BASE_URL}/resources/${req.params.id}/articles`, { timeout: 8000 });
+    res.json(r.data);
+  } catch (err) {
+    res.status(err?.response?.status || 500).json({ message: err?.response?.data?.message || "Error al obtener los artículos de la publicación" });
+  }
+});
+
+app.put("/api/resources/:id/toggle-state", async (req, res) => {
+  try {
+    const r = await axios.put(`${LIBRARY_BASE_URL}/resources/${req.params.id}/toggle-state`, req.body, { timeout: 8000 });
+    res.json(r.data);
+  } catch (err) {
+    res.status(err?.response?.status || 500).json({ message: err?.response?.data?.message || "Error al cambiar estado" });
+  }
+});
+
 app.put("/api/resources/:id/periodical-metadata", async (req, res) => {
   try {
     const r = await axios.put(`${LIBRARY_BASE_URL}/resources/${req.params.id}/periodical-metadata`, req.body, {
