@@ -128,7 +128,45 @@ VALUES
 -- Image
 INSERT INTO images(image_id, resource_id, image_url, image_caption)
 VALUES
-  (9501, 5001, 'https://miro.medium.com/v2/1*SdXRP8f2Lhin89Tht_GRIA.jpeg', 'Cover image (dummy)');
+  (9501, 5001, 'https://miro.medium.com/v2/1*SdXRP8f2Lhin89Tht_GRIA.jpeg', 'Cover image (dummy)'),
+  (9502, 5002, 'https://picsum.photos/seed/ducky5002/400/600', 'Cover image'),
+  (9503, 5003, 'https://picsum.photos/seed/ducky5003/400/600', 'Cover image'),
+  (9504, 5004, 'https://picsum.photos/seed/ducky5004/400/600', 'Cover image'),
+  (9505, 5005, 'https://picsum.photos/seed/ducky5005/400/600', 'Cover image'),
+  (9506, 5006, 'https://picsum.photos/seed/ducky5006/400/600', 'Cover image'),
+  (9507, 5007, 'https://picsum.photos/seed/ducky5007/400/600', 'Cover image'),
+  (9508, 5008, 'https://picsum.photos/seed/ducky5008/400/600', 'Cover image'),
+  (9509, 5009, 'https://picsum.photos/seed/ducky5009/400/600', 'Cover image'),
+  (9510, 5010, 'https://picsum.photos/seed/ducky5010/400/600', 'Cover image'),
+  (9511, 5011, 'https://picsum.photos/seed/ducky5011/400/600', 'Cover image'),
+  (9512, 5012, 'https://picsum.photos/seed/ducky5012/400/600', 'Cover image'),
+  (9513, 5013, 'https://picsum.photos/seed/ducky5013/400/600', 'Cover image'),
+  (9514, 5014, 'https://picsum.photos/seed/ducky5014/400/600', 'Cover image'),
+  (9515, 5015, 'https://picsum.photos/seed/ducky5015/400/600', 'Cover image'),
+  (9516, 5016, 'https://picsum.photos/seed/ducky5016/400/600', 'Cover image'),
+  (9517, 5017, 'https://picsum.photos/seed/ducky5017/400/600', 'Cover image'),
+  (9518, 5018, 'https://picsum.photos/seed/ducky5018/400/600', 'Cover image'),
+  (9519, 5019, 'https://picsum.photos/seed/ducky5019/400/600', 'Cover image'),
+  (9520, 5020, 'https://picsum.photos/seed/ducky5020/400/600', 'Cover image'),
+  (9521, 5021, 'https://picsum.photos/seed/ducky5021/400/600', 'Cover image'),
+  (9522, 5022, 'https://picsum.photos/seed/ducky5022/400/600', 'Cover image'),
+  (9523, 5023, 'https://picsum.photos/seed/ducky5023/400/600', 'Cover image'),
+  (9524, 5024, 'https://picsum.photos/seed/ducky5024/400/600', 'Cover image'),
+  (9525, 5025, 'https://picsum.photos/seed/ducky5025/400/600', 'Cover image'),
+  (9526, 5026, 'https://picsum.photos/seed/ducky5026/400/600', 'Cover image'),
+  (9527, 5027, 'https://picsum.photos/seed/ducky5027/400/600', 'Cover image'),
+  (9528, 5028, 'https://picsum.photos/seed/ducky5028/400/600', 'Cover image'),
+  (9529, 5029, 'https://picsum.photos/seed/ducky5029/400/600', 'Cover image'),
+  (9530, 5030, 'https://picsum.photos/seed/ducky5030/400/600', 'Cover image'),
+  (9531, 5031, 'https://picsum.photos/seed/ducky5031/400/600', 'Cover image'),
+  (9532, 5032, 'https://picsum.photos/seed/ducky5032/400/600', 'Cover image'),
+  (9533, 5033, 'https://picsum.photos/seed/ducky5033/400/600', 'Cover image'),
+  (9534, 5034, 'https://picsum.photos/seed/ducky5034/400/600', 'Cover image'),
+  (9535, 5035, 'https://picsum.photos/seed/ducky5035/400/600', 'Cover image'),
+  (9536, 5036, 'https://picsum.photos/seed/ducky5036/400/600', 'Cover image'),
+  (9537, 5037, 'https://picsum.photos/seed/ducky5037/400/600', 'Cover image'),
+  (9538, 5038, 'https://picsum.photos/seed/ducky5038/400/600', 'Cover image')
+ON CONFLICT DO NOTHING;
 
 -- Loans and reservations
 -- Physical loan for student 2001

@@ -36,7 +36,8 @@ function resourceRowToDto(row) {
     lenguajes: row.lenguajes,
     lenguajes_ids: row.lenguajes_ids ? row.lenguajes_ids.split(',').map(Number) : [],
     ubicacion: row.ubicacion,
-    codebar: row.codebar
+    codebar: row.codebar,
+    portada: row.portada
   };
 }
 
@@ -166,7 +167,8 @@ app.get("/resources", async (req, res) => {
           STRING_AGG(DISTINCT l.language_name, ', ') AS lenguajes,
           STRING_AGG(DISTINCT l.language_id::text, ',') AS lenguajes_ids,
           STRING_AGG(DISTINCT pe.example_location_code, ', ') AS ubicacion,
-          STRING_AGG(DISTINCT pe.barcode, ', ') AS codebar
+          STRING_AGG(DISTINCT pe.barcode, ', ') AS codebar,
+          MAX(im.image_url) AS portada
        FROM resources r
        LEFT JOIN collaborators c ON c.colaborator_id = r.author_principal_id
        LEFT JOIN organizations o ON o.organization_id = r.publisher_id
@@ -177,6 +179,7 @@ app.get("/resources", async (req, res) => {
        LEFT JOIN languages l ON l.language_id = sl.language_id
        LEFT JOIN physical_examples pe ON pe.resource_id = r.resource_id
        LEFT JOIN digital_metadata dm ON dm.resource_id = r.resource_id
+       LEFT JOIN images im ON im.resource_id = r.resource_id
        ${whereSql}
        GROUP BY r.resource_id, c.first_name, c.middle_name, c.father_lastname, c.mother_lastname, c.colaborator_id, o.organization_name, o.organization_id, r.resource_state, r.resource_type, r.resource_publication_year, r.resource_cost, bm.book_isbn, bm.book_edition_number, bm.book_synopsis, dm.digital_url_link
        ${sort === "recent" ? "ORDER BY r.resource_id DESC" : "ORDER BY r.resource_title ASC, r.resource_id ASC"}
@@ -226,6 +229,7 @@ app.get("/resources/:id", async (req, res) => {
           STRING_AGG(DISTINCT l.language_id::text, ',') AS lenguajes_ids,
           STRING_AGG(DISTINCT pe.example_location_code, ', ') AS ubicacion,
           STRING_AGG(DISTINCT pe.barcode, ', ') AS codebar,
+          MAX(im.image_url) AS portada,
           da.resource_parent_id   AS journal_id,
           rj.resource_title       AS journal_title,
           pm.periodical_issn      AS journal_issn,
@@ -249,6 +253,7 @@ app.get("/resources/:id", async (req, res) => {
        LEFT JOIN resources rj ON rj.resource_id = da.resource_parent_id
        LEFT JOIN periodical_metadata pm ON pm.resource_id = da.resource_parent_id
        LEFT JOIN periodical_metadata pm_self ON pm_self.resource_id = r.resource_id
+       LEFT JOIN images im ON im.resource_id = r.resource_id
        WHERE r.resource_id = $1
        GROUP BY r.resource_id, c.first_name, c.middle_name, c.father_lastname, c.mother_lastname,
                 c.colaborator_id, o.organization_name, o.organization_id, r.resource_state,

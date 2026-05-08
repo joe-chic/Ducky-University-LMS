@@ -479,9 +479,13 @@ function LibroDetalle() {
 
               <div className="libro-detalle-top">
                 <div className="libro-portada">
-                  <div className="libro-portada-placeholder">
-                    <span>{libro.tipo?.replace(/_/g, " ")}</span>
-                  </div>
+                  {libro.portada ? (
+                    <img src={libro.portada} alt="portada" style={{ width: "100%", height: "100%", objectFit: "cover", borderRadius: "8px" }} />
+                  ) : (
+                    <div className="libro-portada-placeholder">
+                      <span>{libro.tipo?.replace(/_/g, " ")}</span>
+                    </div>
+                  )}
                 </div>
 
                 <div className="libro-info-principal">

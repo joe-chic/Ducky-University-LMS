@@ -213,7 +213,9 @@ function Home() {
                   </div>
                   <div className="book-card-content">
                     <div className="book-info">
-                      <div className="book-cover">📚</div>
+                      <div className="book-cover" style={{ width: "60px", height: "80px", overflow: "hidden", display: "flex", justifyContent: "center", alignItems: "center", borderRadius: "4px" }}>
+                        {recurso.portada ? <img src={recurso.portada} alt="portada" style={{ width: "100%", height: "100%", objectFit: "cover" }} /> : "📚"}
+                      </div>
                       <div className="book-details">
                         <p className="book-title">{recurso.titulo}</p>
                         <p className="book-autor" style={{ textTransform: "capitalize", fontWeight: "bold" }}>{recurso.tipo.replace('_', ' ')}</p>
