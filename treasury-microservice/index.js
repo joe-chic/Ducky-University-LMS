@@ -170,8 +170,8 @@ app.post(['/fines/:id/pay', '/api/fines/:id/pay'], async (req, res) => {
     const isFullyPaid = totalPaid >= Number(fine.price);
     await client.query(
       `UPDATE fines
-       SET fine_status = $2,
-           paid_at = CASE WHEN $2 = 'paid' THEN NOW() ELSE NULL END,
+       SET fine_status = $2::fine_status,
+           paid_at = CASE WHEN $2::fine_status = 'paid' THEN NOW() ELSE NULL END,
            modified_at = NOW()
        WHERE find_id = $1`,
       [id, isFullyPaid ? 'paid' : 'unpaid']
@@ -229,8 +229,8 @@ app.post(['/fines/pay-by-offender', '/api/fines/pay-by-offender'], async (req, r
       const fullyPaid = newPaid >= Number(fine.price);
       await client.query(
         `UPDATE fines
-         SET fine_status = $2,
-             paid_at = CASE WHEN $2 = 'paid' THEN NOW() ELSE NULL END,
+         SET fine_status = $2::fine_status,
+             paid_at = CASE WHEN $2::fine_status = 'paid' THEN NOW() ELSE NULL END,
              modified_at = NOW()
          WHERE find_id = $1`,
         [fine.find_id, fullyPaid ? 'paid' : 'unpaid']

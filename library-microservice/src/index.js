@@ -832,6 +832,8 @@ app.get("/loans", async (req, res) => {
          pl.initial_lent_at,
          pl.returned_at,
          pl.loan_state,
+         (SELECT COUNT(*)::int FROM physical_loan_renewals pr WHERE pr.loan_id = pl.loan_id) AS renewal_count,
+         (SELECT MAX(pr.renewal_lent_at) FROM physical_loan_renewals pr WHERE pr.loan_id = pl.loan_id) AS last_renewal_at,
          r.resource_title AS titulo,
          CONCAT_WS(' ', c.first_name, c.father_lastname) AS autor,
          pe.example_location_code AS ubicacion
@@ -843,7 +845,16 @@ app.get("/loans", async (req, res) => {
        ORDER BY pl.loan_id DESC`,
       params
     );
-    res.json(result.rows.map(r => ({ ...r, loan_type: 'physical' })));
+    res.json(
+      result.rows.map((r) => {
+        const baseDate = r.last_renewal_at ? new Date(r.last_renewal_at) : new Date(r.initial_lent_at);
+        return {
+          ...r,
+          loan_type: "physical",
+          due_date: addBusinessDays(baseDate, 5),
+        };
+      })
+    );
   } catch (err) {
     if (err.code === "23505") {
       return res.status(400).json({ error: "Action not permitted: " + (err.detail || "Unique constraint violated.") });
@@ -1023,17 +1034,32 @@ app.post("/loans/:id/renew", async (req, res) => {
   const client = await pool.connect();
   try {
     await client.query("BEGIN");
+    const PHYSICAL_MAX_RENEWALS = 2;
     const loan_id = Number(req.params.id);
     const loan = await client.query(
       `SELECT pl.* FROM physical_loans pl WHERE pl.loan_id=$1 AND pl.loan_state IN ('active','overdue')`, [loan_id]
     );
     if (!loan.rows.length) return res.status(404).json({ message: "Prestamo activo no encontrado" });
+    const renewals = await client.query(
+      `SELECT COUNT(*)::int AS cnt FROM physical_loan_renewals WHERE loan_id=$1`,
+      [loan_id]
+    );
+    if (Number(renewals.rows[0]?.cnt || 0) >= PHYSICAL_MAX_RENEWALS) {
+      return res.status(409).json({ message: `No se puede renovar más de ${PHYSICAL_MAX_RENEWALS} veces este préstamo.` });
+    }
     const now = new Date();
     await client.query(`INSERT INTO physical_loan_renewals(loan_id, renewal_lent_at) VALUES($1,$2)`, [loan_id, now]);
     await client.query(`UPDATE physical_loans SET loan_state='active', latest_modified_at=$2, latest_modified_by=1 WHERE loan_id=$1`, [loan_id, now]);
     await client.query("COMMIT");
-    const renewals = await query(`SELECT COUNT(*)::int AS cnt FROM physical_loan_renewals WHERE loan_id=$1`, [loan_id]);
-    res.json({ ok: true, loan_id, renewal_count: renewals.rows[0].cnt, renewed_at: now });
+    const renewalCount = Number(renewals.rows[0]?.cnt || 0) + 1;
+    res.json({
+      ok: true,
+      loan_id,
+      renewal_count: renewalCount,
+      renewed_at: now,
+      max_renewals: PHYSICAL_MAX_RENEWALS,
+      due_date: addBusinessDays(now, 5),
+    });
   } catch (err) {
     await client.query("ROLLBACK");
     console.error(err);

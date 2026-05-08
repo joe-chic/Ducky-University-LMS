@@ -1,6 +1,7 @@
 import { useSidebar } from "../hooks/useSidebar";
 import { useCallback, useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { jsPDF } from "jspdf";
 import "./Home.css";
 import Sidebar from "../components/Sidebar";
 import TopBar from "../components/TopBar";
@@ -72,6 +73,70 @@ function MisPrestamos() {
     return "Completado";
   }
 
+  function drawTicketHeader(doc, title) {
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(16);
+    doc.text("Ducky University LMS", 14, 18);
+    doc.setFontSize(12);
+    doc.text(title, 14, 26);
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(10);
+    doc.text(`Campus ID: ${campusId}`, 14, 33);
+    doc.text(`Generado: ${new Date().toLocaleString("es-MX")}`, 14, 39);
+  }
+
+  function saveLoanTicketPDF(loan, ticketKind) {
+    const doc = new jsPDF();
+    const isDigital = loan.loan_type === "digital";
+    drawTicketHeader(doc, ticketKind === "devolucion" ? "Ticket de Devolucion" : "Ticket de Prestamo");
+
+    let y = 52;
+    const lines = [
+      `Folio de prestamo: #${loan.loan_id}`,
+      `Tipo de recurso: ${isDigital ? "Digital" : "Fisico"}`,
+      `Titulo: ${loan.titulo || "N/D"}`,
+      `Estado: ${badgeLabel(loan.state)}`,
+      `Fecha de prestamo: ${formatDate(loan.initial_lent_at)}`,
+      `Fecha de devolucion: ${formatDate(loan.returned_at)}`,
+      `Barcode: ${loan.barcode || "N/A"}`,
+      `Revista: ${loan.journal_title || "N/A"}`,
+      `ISSN: ${loan.journal_issn || "N/A"}`,
+    ];
+    lines.forEach((line) => {
+      doc.text(line, 14, y);
+      y += 8;
+    });
+
+    doc.setFontSize(9);
+    doc.text("Este ticket contiene la informacion critica para validacion de prestamo/devolucion.", 14, y + 6);
+    const suffix = ticketKind === "devolucion" ? "devolucion" : "prestamo";
+    doc.save(`ticket-${suffix}-${loan.loan_id}.pdf`);
+  }
+
+  function saveFineTicketPDF(fine) {
+    const doc = new jsPDF();
+    drawTicketHeader(doc, "Ticket de Multa");
+
+    let y = 52;
+    const lines = [
+      `Folio de multa: #${fine.find_id}`,
+      `Concepto: ${fine.reason_description || fine.reason_type || `Multa #${fine.find_id}`}`,
+      `Estado: ${fine.fine_status === "unpaid" ? "Sin pagar" : "Pagada"}`,
+      `Monto total: $${Number(fine.price || 0).toFixed(2)} MXN`,
+      `Monto pendiente: $${Number(fine.amount_due ?? fine.price ?? 0).toFixed(2)} MXN`,
+      `Referencia: ${fine.source_transaction_id || "N/A"}`,
+      `Fecha: ${formatDate(fine.created_at)}`,
+    ];
+    lines.forEach((line) => {
+      doc.text(line, 14, y);
+      y += 8;
+    });
+
+    doc.setFontSize(9);
+    doc.text("Comparte este ticket con biblioteca/tesoreria para seguimiento de la sancion.", 14, y + 6);
+    doc.save(`ticket-multa-${fine.find_id}.pdf`);
+  }
+
   return (
     <div className="home-container">
 
@@ -107,6 +172,12 @@ function MisPrestamos() {
                   <span style={{ padding: "4px 12px", borderRadius: "20px", fontSize: "0.78rem", fontWeight: "bold", ...badgeStyle(p.state) }}>
                     {badgeLabel(p.state)}
                   </span>
+                  <button
+                    onClick={() => saveLoanTicketPDF(p, "prestamo")}
+                    style={{ padding: "7px 10px", borderRadius: "6px", border: "1px solid #1976d2", color: "#1976d2", background: "#fff", cursor: "pointer", fontWeight: 700, fontSize: "0.78rem" }}
+                  >
+                    Descargar ticket PDF
+                  </button>
                 </div>
               ))}
             </div>
@@ -132,6 +203,12 @@ function MisPrestamos() {
                   <span style={{ padding: "4px 12px", borderRadius: "20px", fontSize: "0.78rem", fontWeight: "bold", ...badgeStyle(p.state) }}>
                     {badgeLabel(p.state)}
                   </span>
+                  <button
+                    onClick={() => saveLoanTicketPDF(p, "devolucion")}
+                    style={{ padding: "7px 10px", borderRadius: "6px", border: "1px solid #455a64", color: "#455a64", background: "#fff", cursor: "pointer", fontWeight: 700, fontSize: "0.78rem" }}
+                  >
+                    Descargar ticket PDF
+                  </button>
                 </div>
               ))}
             </div>
@@ -163,6 +240,12 @@ function MisPrestamos() {
                     <span style={{ padding: "4px 12px", borderRadius: "20px", fontSize: "0.78rem", fontWeight: "bold", background: f.fine_status === "unpaid" ? "#ffebee" : "#e8f5e9", color: f.fine_status === "unpaid" ? "#c62828" : "#2e7d32", border: `1px solid ${f.fine_status === "unpaid" ? "#ef9a9a" : "#a5d6a7"}` }}>
                       {f.fine_status === "unpaid" ? "Sin pagar" : "Pagada"}
                     </span>
+                    <button
+                      onClick={() => saveFineTicketPDF(f)}
+                      style={{ padding: "7px 10px", borderRadius: "6px", border: "1px solid #6a1b9a", color: "#6a1b9a", background: "#fff", cursor: "pointer", fontWeight: 700, fontSize: "0.78rem" }}
+                    >
+                      Descargar ticket PDF
+                    </button>
                   </div>
                 </div>
               ))}

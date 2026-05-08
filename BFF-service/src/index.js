@@ -448,17 +448,27 @@ app.post("/api/fines/reconcile-campus/:campus_id", async (req, res) => {
     const unpaidCount = Number(treasuryStatusRes.data?.unpaid_count || 0);
     const totalUnpaid = Number(treasuryStatusRes.data?.total_unpaid || 0);
 
-    const userRes = await axios.get(`${USERS_BASE_URL}/users/${campusId}/by-campus`, { timeout: 10_000 });
-    const currentState = userRes.data?.user_state;
+    let userExists = true;
+    let currentState = null;
+    try {
+      const userRes = await axios.get(`${USERS_BASE_URL}/users/${campusId}/by-campus`, { timeout: 10_000 });
+      currentState = userRes.data?.user_state;
+    } catch (userErr) {
+      if (userErr?.response?.status === 404) {
+        userExists = false;
+      } else {
+        throw userErr;
+      }
+    }
     let nextState = currentState;
     let changed = false;
 
-    if (hasUnpaid && currentState !== "blocked") {
+    if (userExists && hasUnpaid && currentState !== "blocked") {
       const upd = await axios.put(`${USERS_BASE_URL}/users/${campusId}/sanction-state`, { blocked: true }, { timeout: 10_000 });
       nextState = upd.data?.user_state || "blocked";
       changed = true;
     }
-    if (!hasUnpaid && currentState === "blocked") {
+    if (userExists && !hasUnpaid && currentState === "blocked") {
       const upd = await axios.put(`${USERS_BASE_URL}/users/${campusId}/sanction-state`, { blocked: false }, { timeout: 10_000 });
       nextState = upd.data?.user_state || "active";
       changed = true;
@@ -470,12 +480,16 @@ app.post("/api/fines/reconcile-campus/:campus_id", async (req, res) => {
       has_unpaid_fines: hasUnpaid,
       unpaid_count: unpaidCount,
       total_unpaid: totalUnpaid,
+      user_exists: userExists,
       user_state_before: currentState,
       user_state_after: nextState,
       sanction_state_changed: changed,
+      can_unblock_loans: userExists && !hasUnpaid,
       message: hasUnpaid
         ? `El alumno mantiene ${unpaidCount} multa(s) sin pagar. Sigue bloqueado para préstamos.`
-        : "Sin multas pendientes. La sanción fue levantada (si existía).",
+        : userExists
+          ? "Sin multas pendientes. La sanción fue levantada (si existía)."
+          : "Sin multas pendientes, pero el campus_id no existe en users-microservice.",
     });
   } catch (err) {
     const status = err?.response?.status || 500;
@@ -570,6 +584,8 @@ app.get("/api/all-loans", async (req, res) => {
       ubicacion:       l.ubicacion,
       initial_lent_at: l.initial_lent_at,
       returned_at:     l.returned_at,
+      renewal_count:   l.renewal_count != null ? Number(l.renewal_count) : 0,
+      due_date:        l.due_date || null,
     }));
 
     const normDigital = digital.map(l => ({

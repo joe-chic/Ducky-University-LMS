@@ -9,6 +9,9 @@ import { bffGet, bffPost, bffPut, getToken } from "../api/bff";
 function Prestamos() {
   const navigate = useNavigate();
   const token = getToken();
+  const userRole = localStorage.getItem("ducky_role") || "";
+  const isAdmin = userRole === "Administrador";
+  const isLib = userRole === "Bibliotecario";
 
   const [sidebarOpen, setSidebarOpen] = useSidebar();
   const [tab, setTab] = useState("prestar");
@@ -38,6 +41,8 @@ function Prestamos() {
   const [finesSearchCampus, setFinesSearchCampus] = useState("");
   const [payCampusId, setPayCampusId] = useState("");
   const [payAmount, setPayAmount] = useState("");
+  const [validatedCampus, setValidatedCampus] = useState({});
+  const [finePriceEdits, setFinePriceEdits] = useState({});
 
   useEffect(() => { if (!token) navigate("/"); }, [token, navigate]);
   useEffect(() => {
@@ -117,7 +122,7 @@ function Prestamos() {
       setMsgDevolver(null);
       try {
         const res = await bffPost(`/api/loans/${loan.loan_id}/renew`, {}, { token });
-        setMsgDevolver({ type: "success", text: `Préstamo #${loan.loan_id} renovado (renovación #${res.renewal_count}).` });
+        setMsgDevolver({ type: "success", text: `Préstamo #${loan.loan_id} renovado (${res.renewal_count}/${res.max_renewals || 2}).` });
         fetchLoans();
       } catch (err) { setMsgDevolver({ type: "error", text: err.message || "Error al renovar el préstamo." }); }
     }
@@ -152,13 +157,36 @@ function Prestamos() {
     }
   }
 
-  async function handlePagarMulta(fineId) {
-    if (!window.confirm("¿Marcar esta multa como pagada?")) return;
+  async function handleActualizarMonto(fineId) {
+    if (!isAdmin) return;
+    const nextPrice = Number(finePriceEdits[fineId]);
+    if (!nextPrice || nextPrice <= 0) {
+      setMsgMulta({ type: "error", text: "Ingresa un monto válido para actualizar la multa." });
+      return;
+    }
     try {
-      await bffPost(`/api/fines/${fineId}/pay`, { payment_method_id: 1 }, { token });
-      setMsgMulta({ type: "success", text: "Multa marcada como pagada." });
+      await bffPut(`/api/fines/${fineId}`, { price: nextPrice }, { token });
+      setMsgMulta({ type: "success", text: `Monto de la multa #${fineId} actualizado en tesorería.` });
       fetchFines();
-    } catch (err) { setMsgMulta({ type: "error", text: err.message || "Error al procesar el pago." }); }
+    } catch (err) {
+      setMsgMulta({ type: "error", text: err.message || "No se pudo actualizar el monto de la multa." });
+    }
+  }
+
+  async function handleMarcarPagadaLocal(campusId) {
+    if (!isLib && !isAdmin) return;
+    if (!validatedCampus[campusId]) {
+      setMsgMulta({ type: "error", text: "Primero valida pago/sanción. Solo se puede marcar pagada si tesorería confirma que no hay adeudos." });
+      return;
+    }
+    if (!window.confirm(`¿Levantar sanción de préstamos para el alumno ${campusId}?`)) return;
+    try {
+      const res = await bffPost(`/api/fines/reconcile-campus/${campusId}`, {}, { token });
+      setMsgMulta({ type: "success", text: res.message || "Sanción actualizada correctamente." });
+      fetchFines();
+    } catch (err) {
+      setMsgMulta({ type: "error", text: err.message || "No se pudo actualizar la sanción del alumno." });
+    }
   }
 
   async function handlePagarPorAlumno() {
@@ -183,6 +211,13 @@ function Prestamos() {
     if (!window.confirm(`¿Verificar pagos en tesorería y actualizar sanción del alumno ${campusId}?`)) return;
     try {
       const res = await bffPost(`/api/fines/reconcile-campus/${campusId}`, {}, { token });
+      if (res?.user_exists === false) {
+        setValidatedCampus((prev) => ({ ...prev, [campusId]: false }));
+        setMsgMulta({ type: "error", text: `El campus_id ${campusId} no existe en users-microservice. Revisa/reseedea usuarios de prueba.` });
+        return;
+      }
+      const canUnblock = Boolean(res?.can_unblock_loans);
+      setValidatedCampus((prev) => ({ ...prev, [campusId]: canUnblock }));
       setMsgMulta({ type: "success", text: res.message || "Sanción actualizada correctamente." });
       fetchFines();
     } catch (err) {
@@ -337,7 +372,7 @@ function Prestamos() {
                     <table>
                       <thead>
                         <tr>
-                          <th>#</th><th>Tipo</th><th>Título</th><th>Usuario</th><th>Fecha</th><th>Estado</th><th>Acciones</th>
+                          <th>#</th><th>Tipo</th><th>Título</th><th>Usuario</th><th>Fecha préstamo</th><th>Fecha límite</th><th>Estado</th><th>Acciones</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -359,6 +394,7 @@ function Prestamos() {
                                 <div style={{ fontSize: "0.75rem", color: "#888" }}>ID: {l.campus_id}</div>
                               </td>
                               <td>{formatDate(l.initial_lent_at)}</td>
+                              <td>{l.due_date ? formatDate(l.due_date) : "—"}</td>
                               <td><Pill {...sb} /></td>
                               <td>
                                 <div style={{ display: "flex", gap: 5, flexWrap: "wrap" }}>
@@ -426,7 +462,7 @@ function Prestamos() {
                   <thead>
                     <tr>
                       <th>#</th><th>Tipo</th><th>Título / Detalle</th><th>Usuario</th>
-                      <th>Fecha préstamo</th><th>Devolución</th><th>Estado</th><th>Acciones</th>
+                      <th>Fecha préstamo</th><th>Fecha límite</th><th>Devolución</th><th>Estado</th><th>Acciones</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -448,6 +484,9 @@ function Prestamos() {
                             {l.loan_type === "digital" && l.renewal_count != null && (
                               <div style={{ fontSize: "0.72rem", color: "#888" }}>Renovaciones: {l.renewal_count}</div>
                             )}
+                            {l.loan_type === "physical" && (
+                              <div style={{ fontSize: "0.72rem", color: "#888" }}>Renovaciones: {Number(l.renewal_count || 0)}/2</div>
+                            )}
                           </td>
                           <td>
                             <div style={{ fontWeight: 600, fontSize: "0.85rem" }}>{l.user_name}</div>
@@ -455,6 +494,7 @@ function Prestamos() {
                             <div style={{ fontSize: "0.75rem", color: "#888" }}>ID: {l.campus_id}</div>
                           </td>
                           <td>{formatDate(l.initial_lent_at)}</td>
+                          <td>{l.due_date ? formatDate(l.due_date) : "—"}</td>
                           <td>{l.returned_at ? formatDate(l.returned_at) : "—"}</td>
                           <td><Pill {...sb} /></td>
                           <td>
@@ -553,18 +593,38 @@ function Prestamos() {
                         <td>{formatDate(f.created_at)}</td>
                         <td>
                           <div style={{ display: "flex", gap: "6px", flexWrap: "wrap" }}>
-                            {f.fine_status === "unpaid" ? (
-                              <button onClick={() => handlePagarMulta(f.find_id)}
-                                style={{ padding: "5px 12px", background: "#FFD400", color: "#1a1a1a", border: "1px solid #e0c000", borderRadius: "6px", fontWeight: 600, cursor: "pointer", fontSize: "0.82rem" }}>
-                                Marcar pagada
-                              </button>
-                            ) : <span style={{ color: "#aaa", fontSize: "0.8rem" }}>—</span>}
                             <button
                               onClick={() => handleReconciliarSancion(f.offender_id)}
                               style={{ padding: "5px 12px", background: "#1565c0", color: "white", border: "none", borderRadius: "6px", fontWeight: 600, cursor: "pointer", fontSize: "0.82rem" }}
                             >
                               Validar pago / sanción
                             </button>
+                            {(isLib || isAdmin) && validatedCampus[f.offender_id] && (
+                              <button
+                                onClick={() => handleMarcarPagadaLocal(f.offender_id)}
+                                style={{ padding: "5px 12px", background: "#FFD400", color: "#1a1a1a", border: "1px solid #e0c000", borderRadius: "6px", fontWeight: 700, cursor: "pointer", fontSize: "0.82rem" }}
+                              >
+                                Marcar pagada / desbloquear
+                              </button>
+                            )}
+                            {isAdmin && (
+                              <>
+                                <input
+                                  type="number"
+                                  step="0.01"
+                                  min="0.01"
+                                  value={finePriceEdits[f.find_id] ?? f.price}
+                                  onChange={(e) => setFinePriceEdits((prev) => ({ ...prev, [f.find_id]: e.target.value }))}
+                                  style={{ width: "110px", padding: "5px 8px", border: "1px solid #ddd", borderRadius: "6px", fontSize: "0.82rem" }}
+                                />
+                                <button
+                                  onClick={() => handleActualizarMonto(f.find_id)}
+                                  style={{ padding: "5px 10px", background: "#6a1b9a", color: "white", border: "none", borderRadius: "6px", fontWeight: 600, cursor: "pointer", fontSize: "0.8rem" }}
+                                >
+                                  Actualizar monto
+                                </button>
+                              </>
+                            )}
                           </div>
                         </td>
                       </tr>
