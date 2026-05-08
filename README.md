@@ -60,8 +60,27 @@ Wait ~20 seconds for seeds to complete, then open any of the portals below.
 | `student2001@ducky.edu` | `maria` | Maria Gonzalez | `2001` |
 | `student2002@ducky.edu` | `luis`  | Luis Perez | `2002` |
 | `student2003@ducky.edu` | `sofia` | Sofia Ramirez | `2003` |
+| `student2004@ducky.edu` | `diego` | Diego Hernandez | `2004` |
+| `student2005@ducky.edu` | `elena` | Elena Castillo | `2005` |
+| `student2006@ducky.edu` | `mateo` | Mateo Navarro | `2006` |
 
 > Students have read-only catalog access. They **cannot** see User Management or Resource Management sections.
+
+### Extra blocked account for testing
+| Email | Password | Role | campus_id | Seed state |
+|-------|----------|------|-----------|------------|
+| `hedy.lamarr@ducky.edu` | `hedy` | Bibliotecario | `1004` | `blocked` |
+
+### Fine/lift workflow seed cases
+- `2001` (`student2001@ducky.edu`): unpaid late-return fine (`find_id=6001`, `source_system=library`).
+- `2004` (`student2004@ducky.edu`): unpaid damage fine (`find_id=6003`, `source_system=library`).
+- `2005` (`student2005@ducky.edu`): paid fine (`find_id=6004`) to validate unblocked flow.
+- `2006` (`student2006@ducky.edu`): unpaid loss fine (`find_id=6005`), account seeded as disabled.
+
+Use this test flow:
+1. In Treasury, register a payment (`Pay by student`) for `2001` or `2004`.
+2. In Library LMS (`Préstamos` → `Multas`), click `Validar pago / sanción`.
+3. Retry loan creation for that student to confirm block/lift behavior.
 
 ---
 

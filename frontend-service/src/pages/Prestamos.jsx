@@ -35,6 +35,9 @@ function Prestamos() {
   const [modalMulta, setModalMulta] = useState(null);
   const [multaMonto, setMultaMonto] = useState("");
   const [dailyFine, setDailyFine]   = useState(10);
+  const [finesSearchCampus, setFinesSearchCampus] = useState("");
+  const [payCampusId, setPayCampusId] = useState("");
+  const [payAmount, setPayAmount] = useState("");
 
   useEffect(() => { if (!token) navigate("/"); }, [token, navigate]);
   useEffect(() => {
@@ -158,6 +161,35 @@ function Prestamos() {
     } catch (err) { setMsgMulta({ type: "error", text: err.message || "Error al procesar el pago." }); }
   }
 
+  async function handlePagarPorAlumno() {
+    if (!payCampusId || Number(payAmount) <= 0) {
+      setMsgMulta({ type: "error", text: "Ingresa matrícula y monto válidos para registrar el pago." });
+      return;
+    }
+    try {
+      const res = await bffPost("/api/fines/pay-by-offender", {
+        offender_id: Number(payCampusId),
+        amount_paid: Number(payAmount),
+        payment_method_id: 1,
+      }, { token });
+      setMsgMulta({ type: "success", text: `Pago aplicado: $${Number(res.total_applied || 0).toFixed(2)} MXN a ${payCampusId}.` });
+      fetchFines();
+    } catch (err) {
+      setMsgMulta({ type: "error", text: err.message || "No se pudo aplicar el pago por matrícula." });
+    }
+  }
+
+  async function handleReconciliarSancion(campusId) {
+    if (!window.confirm(`¿Verificar pagos en tesorería y actualizar sanción del alumno ${campusId}?`)) return;
+    try {
+      const res = await bffPost(`/api/fines/reconcile-campus/${campusId}`, {}, { token });
+      setMsgMulta({ type: "success", text: res.message || "Sanción actualizada correctamente." });
+      fetchFines();
+    } catch (err) {
+      setMsgMulta({ type: "error", text: err.message || "No se pudo reconciliar la sanción." });
+    }
+  }
+
   const filtered = loans.filter(l =>
     !search ||
     l.titulo?.toLowerCase().includes(search.toLowerCase()) ||
@@ -167,6 +199,9 @@ function Prestamos() {
     l.user_name?.toLowerCase().includes(search.toLowerCase()) ||
     l.user_email?.toLowerCase().includes(search.toLowerCase()) ||
     String(l.campus_id).includes(search)
+  );
+  const filteredFines = fines.filter((f) =>
+    !finesSearchCampus || String(f.offender_id || "").includes(finesSearchCampus.trim())
   );
 
   function stateBadge(state, loanType) {
@@ -466,7 +501,36 @@ function Prestamos() {
               <p style={{ marginBottom: 16, color: "#666", fontSize: "0.9rem" }}>
                 Monto base por día: <strong>${dailyFine} MXN</strong> · Los recursos digitales no generan multas por vencimiento.
               </p>
-              {loadingFines ? <div className="loading">Cargando multas…</div> : fines.length === 0 ? (
+              <div style={{ display: "flex", gap: "8px", flexWrap: "wrap", marginBottom: "14px" }}>
+                <input
+                  type="text"
+                  placeholder="Buscar por matrícula"
+                  value={finesSearchCampus}
+                  onChange={(e) => setFinesSearchCampus(e.target.value)}
+                  style={{ padding: "8px 10px", border: "1px solid #ddd", borderRadius: "6px", minWidth: "180px" }}
+                />
+                <input
+                  type="number"
+                  placeholder="Matrícula para pago"
+                  value={payCampusId}
+                  onChange={(e) => setPayCampusId(e.target.value)}
+                  style={{ padding: "8px 10px", border: "1px solid #ddd", borderRadius: "6px", minWidth: "180px" }}
+                />
+                <input
+                  type="number"
+                  placeholder="Monto a pagar"
+                  value={payAmount}
+                  onChange={(e) => setPayAmount(e.target.value)}
+                  style={{ padding: "8px 10px", border: "1px solid #ddd", borderRadius: "6px", minWidth: "160px" }}
+                />
+                <button
+                  onClick={handlePagarPorAlumno}
+                  style={{ padding: "8px 12px", background: "#2e7d32", color: "white", border: "none", borderRadius: "6px", fontWeight: 700, cursor: "pointer" }}
+                >
+                  Registrar pago por matrícula
+                </button>
+              </div>
+              {loadingFines ? <div className="loading">Cargando multas…</div> : filteredFines.length === 0 ? (
                 <div className="empty-state">No hay multas registradas.</div>
               ) : (
                 <table>
@@ -474,12 +538,12 @@ function Prestamos() {
                     <tr><th>#</th><th>Usuario ID</th><th>Monto</th><th>Motivo</th><th>Préstamo</th><th>Estado</th><th>Fecha</th><th>Acción</th></tr>
                   </thead>
                   <tbody>
-                    {fines.map(f => (
+                    {filteredFines.map(f => (
                       <tr key={f.find_id}>
                         <td>{f.find_id}</td>
                         <td>{f.offender_id}</td>
                         <td><strong>${Number(f.price).toFixed(2)}</strong></td>
-                        <td>{f.reason_description}</td>
+                        <td>{f.reason_description || f.reason_type || `Código ${f.reason_code_id}`}</td>
                         <td>{f.source_transaction_id}</td>
                         <td>
                           <span style={{ padding: "3px 10px", borderRadius: "20px", fontSize: "0.78rem", fontWeight: 700, ...fineStatusStyle(f.fine_status) }}>
@@ -488,12 +552,20 @@ function Prestamos() {
                         </td>
                         <td>{formatDate(f.created_at)}</td>
                         <td>
-                          {f.fine_status === "unpaid" ? (
-                            <button onClick={() => handlePagarMulta(f.find_id)}
-                              style={{ padding: "5px 12px", background: "#FFD400", color: "#1a1a1a", border: "1px solid #e0c000", borderRadius: "6px", fontWeight: 600, cursor: "pointer", fontSize: "0.82rem" }}>
-                              Marcar pagada
+                          <div style={{ display: "flex", gap: "6px", flexWrap: "wrap" }}>
+                            {f.fine_status === "unpaid" ? (
+                              <button onClick={() => handlePagarMulta(f.find_id)}
+                                style={{ padding: "5px 12px", background: "#FFD400", color: "#1a1a1a", border: "1px solid #e0c000", borderRadius: "6px", fontWeight: 600, cursor: "pointer", fontSize: "0.82rem" }}>
+                                Marcar pagada
+                              </button>
+                            ) : <span style={{ color: "#aaa", fontSize: "0.8rem" }}>—</span>}
+                            <button
+                              onClick={() => handleReconciliarSancion(f.offender_id)}
+                              style={{ padding: "5px 12px", background: "#1565c0", color: "white", border: "none", borderRadius: "6px", fontWeight: 600, cursor: "pointer", fontSize: "0.82rem" }}
+                            >
+                              Validar pago / sanción
                             </button>
-                          ) : <span style={{ color: "#aaa", fontSize: "0.8rem" }}>—</span>}
+                          </div>
                         </td>
                       </tr>
                     ))}

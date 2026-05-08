@@ -1,10 +1,10 @@
 import { useSidebar } from "../hooks/useSidebar";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import "./Home.css";
 import Sidebar from "../components/Sidebar";
 import TopBar from "../components/TopBar";
-import { bffGet, getToken } from "../api/bff";
+import { bffGet, bffPost, getToken } from "../api/bff";
 
 function MisPrestamos() {
   const navigate = useNavigate();
@@ -20,12 +20,7 @@ function MisPrestamos() {
     if (!getToken()) navigate("/");
   }, [navigate]);
 
-  useEffect(() => {
-    fetchPrestamos();
-    fetchMultas();
-  }, []);
-
-  const fetchPrestamos = async () => {
+  const fetchPrestamos = useCallback(async () => {
     setLoading(true);
     try {
       const token = getToken();
@@ -36,20 +31,26 @@ function MisPrestamos() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [campusId]);
 
-  const fetchMultas = async () => {
+  const fetchMultas = useCallback(async () => {
     setLoadingMultas(true);
     try {
       const token = getToken();
+      await bffPost(`/api/fines/reconcile-campus/${campusId}`, {}, { token }).catch(() => ({}));
       const data = await bffGet("/api/fines", { token, params: { campus_id: campusId } });
-      setMultas(Array.isArray(data) ? data : []);
+      setMultas(Array.isArray(data) ? data : (Array.isArray(data?.items) ? data.items : []));
     } catch {
       setMultas([]);
     } finally {
       setLoadingMultas(false);
     }
-  };
+  }, [campusId]);
+
+  useEffect(() => {
+    fetchPrestamos();
+    fetchMultas();
+  }, [fetchPrestamos, fetchMultas]);
 
   const activos = prestamos.filter(p => p.state === "active" || p.state === "overdue");
   const historial = prestamos.filter(p => p.state === "completed");
@@ -149,7 +150,9 @@ function MisPrestamos() {
               {multas.map(f => (
                 <div key={f.find_id} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", background: f.fine_status === "unpaid" ? "#fff8f8" : "#fafafa", border: `1px solid ${f.fine_status === "unpaid" ? "#ef9a9a" : "#e0e0e0"}`, borderRadius: "8px", padding: "16px 20px", flexWrap: "wrap", gap: "12px" }}>
                   <div style={{ flex: 1 }}>
-                    <p style={{ fontWeight: "bold", fontSize: "0.95rem", marginBottom: "3px" }}>{f.reason_description}</p>
+                    <p style={{ fontWeight: "bold", fontSize: "0.95rem", marginBottom: "3px" }}>
+                      {f.reason_description || f.reason_type || `Multa #${f.find_id}`}
+                    </p>
                     <p style={{ color: "#666", fontSize: "0.82rem" }}>Referencia: {f.source_transaction_id}</p>
                     <p style={{ color: "#666", fontSize: "0.82rem" }}>Fecha: {formatDate(f.created_at)}</p>
                   </div>

@@ -13,7 +13,45 @@ const PORT = process.env.PORT ? Number(process.env.PORT) : 4000;
 
 const USERS_BASE_URL = process.env.USERS_BASE_URL || "http://users-microservice:3001";
 const LIBRARY_BASE_URL = process.env.LIBRARY_BASE_URL || "http://library-microservice:3002";
-const TREASURY_BASE_URL = process.env.TREASURY_BASE_URL || "http://treasury-microservice:3003";
+const TREASURY_BASE_URL = process.env.TREASURY_BASE_URL || "http://treasury-microservice:3007";
+
+function normalizeFineListPayload(data) {
+  if (Array.isArray(data)) return data;
+  if (Array.isArray(data?.items)) return data.items;
+  return [];
+}
+
+async function reconcileLibraryFinesSanctions() {
+  try {
+    const finesRes = await axios.get(`${TREASURY_BASE_URL}/fines`, {
+      params: { source_system: "library" },
+      timeout: 10_000,
+    });
+    const fines = normalizeFineListPayload(finesRes.data);
+    const offenders = new Map();
+    for (const fine of fines) {
+      const offenderId = Number(fine.offender_id || 0);
+      if (!offenderId) continue;
+      const prev = offenders.get(offenderId) || { hasUnpaid: false };
+      offenders.set(offenderId, { hasUnpaid: prev.hasUnpaid || fine.fine_status === "unpaid" });
+    }
+
+    for (const [campusId, info] of offenders.entries()) {
+      try {
+        const userRes = await axios.get(`${USERS_BASE_URL}/users/${campusId}/by-campus`, { timeout: 10_000 });
+        const currentState = userRes.data?.user_state;
+        if (info.hasUnpaid && currentState !== "blocked") {
+          await axios.put(`${USERS_BASE_URL}/users/${campusId}/sanction-state`, { blocked: true }, { timeout: 10_000 });
+        } else if (!info.hasUnpaid && currentState === "blocked") {
+          await axios.put(`${USERS_BASE_URL}/users/${campusId}/sanction-state`, { blocked: false }, { timeout: 10_000 });
+        }
+      } catch (_err) {}
+    }
+    return { processed_offenders: offenders.size };
+  } catch (_err) {
+    return { processed_offenders: 0 };
+  }
+}
 
 app.get("/health", (_req, res) => {
   res.json({ ok: true });
@@ -177,8 +215,9 @@ app.post("/api/loans", async (req, res) => {
     const finesRes = await axios.get(`${TREASURY_BASE_URL}/fines`, {
       params: { campus_id, status: "unpaid" }, timeout: 10_000,
     }).catch(() => ({ data: [] }));
-    const unpaidFines = Array.isArray(finesRes.data) ? finesRes.data : [];
+    const unpaidFines = normalizeFineListPayload(finesRes.data);
     if (unpaidFines.length > 0) {
+      await axios.put(`${USERS_BASE_URL}/users/${campus_id}/sanction-state`, { blocked: true }, { timeout: 10_000 }).catch(() => {});
       return res.status(403).json({
         message: `Tienes ${unpaidFines.length} multa(s) sin pagar (total: $${unpaidFines.reduce((s, f) => s + parseFloat(f.price), 0).toFixed(2)} MXN). Deberás liquidarlas antes de solicitar un préstamo.`
       });
@@ -395,7 +434,58 @@ app.get("/api/fines", (req, res) => proxyTreasury(req, res, "/fines", "GET"));
 app.post("/api/fines", (req, res) => proxyTreasury(req, res, "/fines", "POST"));
 app.put("/api/fines/:id", (req, res) => proxyTreasury(req, res, `/fines/${req.params.id}`, "PUT"));
 app.post("/api/fines/:id/pay", (req, res) => proxyTreasury(req, res, `/fines/${req.params.id}/pay`, "POST"));
+app.post("/api/fines/pay-by-offender", (req, res) => proxyTreasury(req, res, "/fines/pay-by-offender", "POST"));
 app.get("/api/daily-fine", (req, res) => proxyTreasury(req, res, "/daily-fine", "GET"));
+
+app.post("/api/fines/reconcile-campus/:campus_id", async (req, res) => {
+  try {
+    const campusId = Number(req.params.campus_id);
+    if (!campusId) return res.status(400).json({ message: "campus_id inválido." });
+
+    const treasuryStatusRes = await axios.get(`${TREASURY_BASE_URL}/fines/offender/${campusId}/status`, { timeout: 10_000 });
+    const hasUnpaid = Boolean(treasuryStatusRes.data?.has_unpaid_fines);
+    const unpaidCount = Number(treasuryStatusRes.data?.unpaid_count || 0);
+    const totalUnpaid = Number(treasuryStatusRes.data?.total_unpaid || 0);
+
+    const userRes = await axios.get(`${USERS_BASE_URL}/users/${campusId}/by-campus`, { timeout: 10_000 });
+    const currentState = userRes.data?.user_state;
+    let nextState = currentState;
+    let changed = false;
+
+    if (hasUnpaid && currentState !== "blocked") {
+      const upd = await axios.put(`${USERS_BASE_URL}/users/${campusId}/sanction-state`, { blocked: true }, { timeout: 10_000 });
+      nextState = upd.data?.user_state || "blocked";
+      changed = true;
+    }
+    if (!hasUnpaid && currentState === "blocked") {
+      const upd = await axios.put(`${USERS_BASE_URL}/users/${campusId}/sanction-state`, { blocked: false }, { timeout: 10_000 });
+      nextState = upd.data?.user_state || "active";
+      changed = true;
+    }
+
+    return res.json({
+      ok: true,
+      campus_id: campusId,
+      has_unpaid_fines: hasUnpaid,
+      unpaid_count: unpaidCount,
+      total_unpaid: totalUnpaid,
+      user_state_before: currentState,
+      user_state_after: nextState,
+      sanction_state_changed: changed,
+      message: hasUnpaid
+        ? `El alumno mantiene ${unpaidCount} multa(s) sin pagar. Sigue bloqueado para préstamos.`
+        : "Sin multas pendientes. La sanción fue levantada (si existía).",
+    });
+  } catch (err) {
+    const status = err?.response?.status || 500;
+    return res.status(status).json({ message: err?.response?.data?.message || "Error al reconciliar sanciones del alumno." });
+  }
+});
+
+app.post("/api/library-fines/reconcile", async (_req, res) => {
+  const result = await reconcileLibraryFinesSanctions();
+  res.json({ ok: true, ...result });
+});
 
 // ── Combined physical + digital loans ────────────────────────────────────────
 app.get("/api/all-loans", async (req, res) => {
@@ -618,8 +708,9 @@ app.post("/api/digital-loans", async (req, res) => {
     const finesRes = await axios.get(`${TREASURY_BASE_URL}/fines`, {
       params: { campus_id, status: "unpaid" }, timeout: 10_000,
     }).catch(() => ({ data: [] }));
-    const unpaidFines = Array.isArray(finesRes.data) ? finesRes.data : [];
+    const unpaidFines = normalizeFineListPayload(finesRes.data);
     if (unpaidFines.length > 0) {
+      await axios.put(`${USERS_BASE_URL}/users/${campus_id}/sanction-state`, { blocked: true }, { timeout: 10_000 }).catch(() => {});
       return res.status(403).json({
         message: `Tienes multas pendientes. Deberás liquidarlas antes de solicitar un préstamo digital.`
       });
@@ -669,3 +760,12 @@ app.listen(PORT, () => {
   // eslint-disable-next-line no-console
   console.log(`BFF listening on :${PORT}`);
 });
+
+const LIBRARY_FINE_SYNC_ENABLED = String(process.env.LIBRARY_FINE_SYNC_ENABLED || "true").toLowerCase() !== "false";
+const LIBRARY_FINE_SYNC_INTERVAL_MS = Number(process.env.LIBRARY_FINE_SYNC_INTERVAL_MS || 60_000);
+if (LIBRARY_FINE_SYNC_ENABLED) {
+  reconcileLibraryFinesSanctions().catch(() => {});
+  setInterval(() => {
+    reconcileLibraryFinesSanctions().catch(() => {});
+  }, Math.max(15_000, LIBRARY_FINE_SYNC_INTERVAL_MS));
+}

@@ -123,6 +123,42 @@ app.get("/users/:campus_id/by-campus", async (req, res) => {
   }
 });
 
+// PUT /users/:campus_id/sanction-state
+// Internal endpoint for service orchestration (treasury/library sanctions).
+app.put("/users/:campus_id/sanction-state", async (req, res) => {
+  try {
+    const campus_id = Number(req.params.campus_id);
+    const { blocked } = req.body || {};
+    if (!campus_id) return res.status(400).json({ message: "campus_id invalido" });
+    if (typeof blocked !== "boolean") return res.status(400).json({ message: "blocked debe ser booleano." });
+
+    const nextState = blocked ? "blocked" : "active";
+    const result = await query(
+      `UPDATE users
+       SET user_state = $1,
+           latest_modified_at = NOW()
+       WHERE campus_id = $2
+       RETURNING user_id, campus_id, user_email, user_state, first_name, father_lastname`,
+      [nextState, campus_id]
+    );
+    if (!result.rows.length) return res.status(404).json({ message: "Usuario no encontrado" });
+    const row = result.rows[0];
+    res.json({
+      user_id: row.user_id,
+      campus_id: row.campus_id,
+      email: row.user_email,
+      user_state: row.user_state,
+      nombre: `${row.first_name} ${row.father_lastname}`,
+    });
+  } catch (err) {
+    if (err.code === "23505") {
+      return res.status(400).json({ error: "Action not permitted: " + (err.detail || "Unique constraint violated.") });
+    }
+    console.error(err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // GET /users?search=&page=&pageSize=
 app.get("/users", authMiddleware, async (req, res) => {
   try {
