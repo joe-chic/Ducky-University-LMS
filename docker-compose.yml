@@ -360,27 +360,14 @@ services:
     volumes:
       - ollama_data:/root/.ollama
 
-  ollama-init:
-    image: ollama/ollama:latest
-    depends_on:
-      - ollama
-    entrypoint: ["/bin/sh", "-c"]
-    command: >
-      "sleep 6;
-      ollama pull qwen2.5:1.5b || true"
-    volumes:
-      - ollama_data:/root/.ollama
-    restart: "no"
-
   chatbot-microservice:
     build: ./chatbot-microservice
     environment:
       PORT: 4005
       OLLAMA_URL: http://ollama:11434
-      OLLAMA_MODEL: qwen2.5:1.5b
+      OLLAMA_MODEL: tinyllama
     depends_on:
       - ollama
-      - ollama-init
     ports:
       - "4005:4005"
 

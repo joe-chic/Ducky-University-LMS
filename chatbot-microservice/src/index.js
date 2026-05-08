@@ -11,7 +11,24 @@ app.use(express.json({ limit: "1mb" }));
 
 const PORT = Number(process.env.PORT || 4005);
 const OLLAMA_URL = process.env.OLLAMA_URL || "http://ollama:11434";
-const OLLAMA_MODEL = process.env.OLLAMA_MODEL || "qwen2.5:1.5b";
+const OLLAMA_MODEL = process.env.OLLAMA_MODEL || "tinyllama";
+
+function fallbackReply(input) {
+  const q = String(input || "").toLowerCase();
+  if (q.includes("prestamo") || q.includes("préstamo")) {
+    return "Para hacer un préstamo: 1) ve a Recursos, 2) abre el recurso, 3) solicita el préstamo del ejemplar disponible. Si tienes multas pendientes, el sistema bloqueará nuevos préstamos hasta pagarlas.";
+  }
+  if (q.includes("dura") || q.includes("cuanto") || q.includes("cuánto")) {
+    return "La duración típica del préstamo físico es de alrededor de 5 días hábiles. Para la fecha exacta, revisa el detalle del préstamo en Mis Préstamos.";
+  }
+  if (q.includes("renuevo") || q.includes("renovar")) {
+    return "Para renovar: entra a la sección de Préstamos y busca tu préstamo activo; si está habilitado, usa el botón Renovar.";
+  }
+  if (q.includes("multa") || q.includes("multas")) {
+    return "Para verificar multas pendientes: ve a Mis Préstamos > Mis Multas. Si tienes adeudos, primero realiza el pago y luego valida/actualiza la sanción en el flujo de biblioteca.";
+  }
+  return "Puedo ayudarte con préstamos, renovaciones, devoluciones y multas. Prueba con: '¿Cómo hago un préstamo?' o '¿Tengo multas pendientes?'.";
+}
 
 const LMS_SYSTEM_PROMPT = `
 Eres "Asistente Ducky", un chatbot de soporte del LMS de biblioteca.
@@ -63,7 +80,7 @@ app.post("/chat", async (req, res) => {
         stream: false,
         options: { temperature: 0.3 },
       },
-      { timeout: 60_000 }
+      { timeout: 8_000 }
     );
 
     const reply = response?.data?.message?.content?.trim();
@@ -71,9 +88,9 @@ app.post("/chat", async (req, res) => {
       return res.status(502).json({ message: "No se obtuvo respuesta del modelo." });
     }
     return res.json({ reply });
-  } catch (err) {
-    const detail = err?.response?.data?.error || err?.message || "Error del chatbot";
-    return res.status(500).json({ message: `No pude responder en este momento (${detail}).` });
+  } catch (_err) {
+    // Fast fallback when model is still downloading / unavailable.
+    return res.json({ reply: fallbackReply(req.body?.message) });
   }
 });
 
