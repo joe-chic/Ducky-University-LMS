@@ -41,6 +41,44 @@ function resourceRowToDto(row) {
   };
 }
 
+function pgErrorToClientError(err) {
+  const code = err?.code;
+  const constraint = String(err?.constraint || "");
+  const detail = String(err?.detail || "");
+
+  // Postgres error codes reference:
+  // - 23505 unique_violation
+  // - 23503 foreign_key_violation
+  // - 23502 not_null_violation
+  // - 23514 check_violation
+  // - 22P02 invalid_text_representation
+  if (code === "23505") {
+    return { status: 400, message: detail || "Valor duplicado: ya existe un registro con el mismo valor." };
+  }
+  if (code === "23503") {
+    return { status: 400, message: "Referencia inválida (ID no existe). Revisa Autor/Editorial/Categorías/Lenguajes." };
+  }
+  if (code === "23502") {
+    return { status: 400, message: "Faltan campos obligatorios para guardar el recurso." };
+  }
+  if (code === "22P02") {
+    return { status: 400, message: "Algún valor numérico/ID es inválido. Revisa los campos e intenta de nuevo." };
+  }
+  if (code === "23514") {
+    if (constraint.toLowerCase().includes("maps_scale")) {
+      return { status: 400, message: "Escala de mapa inválida. Usa el formato N:N (ej. 1:1000)." };
+    }
+    if (constraint.toLowerCase().includes("maps_projection_type")) {
+      return { status: 400, message: "Tipo de proyección inválido. Debe estar en minúsculas." };
+    }
+    if (constraint.toLowerCase().includes("audiovisual_minutes")) {
+      return { status: 400, message: "Duración audiovisual inválida. Debe ser un número mayor a 0." };
+    }
+    return { status: 400, message: "Algún campo no cumple las reglas del sistema (validación de base de datos)." };
+  }
+  return null;
+}
+
 // METADATA (For Dropdowns)
 app.get("/library-metadata", async (req, res) => {
   try {
@@ -344,7 +382,7 @@ app.post("/resources", async (req, res) => {
     await client.query('BEGIN');
     const {
       titulo, tipo, disponible, ano_publicacion, costo,
-      autor_id, nuevo_autor, editorial_id, nueva_editorial,
+      autor_id, nuevo_autor, nuevo_autor_nombre, nuevo_autor_apellido, editorial_id, nueva_editorial,
       generos_ids, lenguajes_ids, lenguaje_principal_id,
       isbn, edicion, sinopsis,
       journal_issn, journal_frequency, journal_peer_reviewed,
@@ -352,15 +390,38 @@ app.post("/resources", async (req, res) => {
       audiovisual_minutes, maps_scale, maps_projection_type, maps_type
     } = req.body || {};
     if (!titulo || !tipo) return res.status(400).json({ message: "Title and type are required" });
+
+    let normalizedIssn = journal_issn;
+    if (normalizedIssn != null) {
+      normalizedIssn = String(normalizedIssn).replace(/-/g, "").trim();
+      if (normalizedIssn.length > 8) {
+        return res.status(400).json({ message: "El ISSN no debe exceder 8 caracteres." });
+      }
+      if (normalizedIssn === "") normalizedIssn = null;
+    }
     
     await client.query(`SELECT setval('resources_resource_id_seq', COALESCE((SELECT MAX(resource_id) FROM resources), 1))`);
     
     const state = disponible ? 'available' : 'disabled';
     
     let final_autor_id = autor_id || null;
-    if (nuevo_autor && nuevo_autor.trim()) {
-      const parts = nuevo_autor.trim().split(' ');
-      const resColab = await client.query(`INSERT INTO collaborators(first_name, father_lastname, nationality_id) VALUES($1, $2, 1) RETURNING colaborator_id`, [parts[0], parts.slice(1).join(' ') || null]);
+    const nombreAutor = String(nuevo_autor_nombre || "").trim();
+    const apellidoAutor = String(nuevo_autor_apellido || "").trim();
+    if (nombreAutor && apellidoAutor) {
+      const resColab = await client.query(
+        `INSERT INTO collaborators(first_name, father_lastname, nationality_id) VALUES($1, $2, 1) RETURNING colaborator_id`,
+        [nombreAutor, apellidoAutor]
+      );
+      final_autor_id = resColab.rows[0].colaborator_id;
+    } else if (nuevo_autor && String(nuevo_autor).trim()) {
+      // Backward compatibility with legacy single-field payload
+      const parts = String(nuevo_autor).trim().split(/\s+/);
+      const legacyNombre = parts[0] || null;
+      const legacyApellido = parts.slice(1).join(" ") || null;
+      const resColab = await client.query(
+        `INSERT INTO collaborators(first_name, father_lastname, nationality_id) VALUES($1, $2, 1) RETURNING colaborator_id`,
+        [legacyNombre, legacyApellido]
+      );
       final_autor_id = resColab.rows[0].colaborator_id;
     }
     let final_editorial_id = editorial_id || null;
@@ -382,7 +443,11 @@ app.post("/resources", async (req, res) => {
        await client.query(`INSERT INTO book_metadata(resource_id, book_isbn, book_edition_number, book_synopsis) VALUES ($1, $2, $3, $4)`, [resource_id, isbn || null, edicion || null, sinopsis || null]);
     }
     if (['e_journal', 'e_magazine', 'journal_magazine'].includes(tipo)) {
-       await client.query(`INSERT INTO periodical_metadata(resource_id, periodical_issn, periodical_frequency, peer_reviewed) VALUES ($1, $2, $3, $4)`, [resource_id, journal_issn || null, journal_frequency || 'monthly', journal_peer_reviewed || false]);
+       await client.query(
+         `INSERT INTO periodical_metadata(resource_id, periodical_issn, periodical_frequency, peer_reviewed)
+          VALUES ($1, $2, $3, $4)`,
+         [resource_id, normalizedIssn || null, journal_frequency || 'monthly', journal_peer_reviewed || false]
+       );
     }
     if (['e_article', 'digital_article'].includes(tipo) && journal_id) {
        await client.query(`INSERT INTO digital_articles(resource_child_id, resource_parent_id, digital_article_issue, digital_article_volume, digital_article_year) VALUES ($1, $2, $3, $4, $5)`, [resource_id, journal_id, article_issue || null, article_volume || null, article_year || null]);
@@ -414,7 +479,9 @@ app.post("/resources", async (req, res) => {
   } catch (err) {
     await client.query('ROLLBACK');
     console.error(err);
-    res.status(500).json({ message: "Failed to create resource" });
+    const mapped = pgErrorToClientError(err);
+    if (mapped) return res.status(mapped.status).json({ message: mapped.message });
+    res.status(500).json({ message: "Error interno al crear el recurso." });
   } finally {
     client.release();
   }
@@ -429,7 +496,7 @@ app.put("/resources/:id", async (req, res) => {
     if (!id) return res.status(400).json({ message: "Invalid id" });
     const {
       titulo, tipo, disponible, ano_publicacion, costo,
-      autor_id, nuevo_autor, editorial_id, nueva_editorial,
+      autor_id, nuevo_autor, nuevo_autor_nombre, nuevo_autor_apellido, editorial_id, nueva_editorial,
       generos_ids, lenguajes_ids, lenguaje_principal_id,
       isbn, edicion, sinopsis,
       journal_issn, journal_frequency, journal_peer_reviewed,
@@ -437,13 +504,36 @@ app.put("/resources/:id", async (req, res) => {
       audiovisual_minutes, maps_scale, maps_projection_type, maps_type
     } = req.body || {};
     if (!titulo || !tipo) return res.status(400).json({ message: "Title and type are required" });
+
+    let normalizedIssn = journal_issn;
+    if (normalizedIssn != null) {
+      normalizedIssn = String(normalizedIssn).replace(/-/g, "").trim();
+      if (normalizedIssn.length > 8) {
+        return res.status(400).json({ message: "El ISSN no debe exceder 8 caracteres." });
+      }
+      if (normalizedIssn === "") normalizedIssn = null;
+    }
     
     const state = disponible ? 'available' : 'disabled';
     
     let final_autor_id = autor_id || null;
-    if (nuevo_autor && nuevo_autor.trim()) {
-      const parts = nuevo_autor.trim().split(' ');
-      const resColab = await client.query(`INSERT INTO collaborators(first_name, father_lastname, nationality_id) VALUES($1, $2, 1) RETURNING colaborator_id`, [parts[0], parts.slice(1).join(' ') || null]);
+    const nombreAutor = String(nuevo_autor_nombre || "").trim();
+    const apellidoAutor = String(nuevo_autor_apellido || "").trim();
+    if (nombreAutor && apellidoAutor) {
+      const resColab = await client.query(
+        `INSERT INTO collaborators(first_name, father_lastname, nationality_id) VALUES($1, $2, 1) RETURNING colaborator_id`,
+        [nombreAutor, apellidoAutor]
+      );
+      final_autor_id = resColab.rows[0].colaborator_id;
+    } else if (nuevo_autor && String(nuevo_autor).trim()) {
+      // Backward compatibility with legacy single-field payload
+      const parts = String(nuevo_autor).trim().split(/\s+/);
+      const legacyNombre = parts[0] || null;
+      const legacyApellido = parts.slice(1).join(" ") || null;
+      const resColab = await client.query(
+        `INSERT INTO collaborators(first_name, father_lastname, nationality_id) VALUES($1, $2, 1) RETURNING colaborator_id`,
+        [legacyNombre, legacyApellido]
+      );
       final_autor_id = resColab.rows[0].colaborator_id;
     }
     let final_editorial_id = editorial_id || null;
@@ -474,7 +564,15 @@ app.put("/resources/:id", async (req, res) => {
        await client.query(`INSERT INTO book_metadata(resource_id, book_isbn, book_edition_number, book_synopsis) VALUES ($1, $2, $3, $4) ON CONFLICT (resource_id) DO UPDATE SET book_isbn = $2, book_edition_number = $3, book_synopsis = $4`, [id, isbn || null, edicion || null, sinopsis || null]);
     }
     if (['e_journal', 'e_magazine', 'journal_magazine'].includes(tipo)) {
-       await client.query(`INSERT INTO periodical_metadata(resource_id, periodical_issn, periodical_frequency, peer_reviewed) VALUES ($1, $2, $3, $4) ON CONFLICT (resource_id) DO UPDATE SET periodical_issn = EXCLUDED.periodical_issn, periodical_frequency = EXCLUDED.periodical_frequency, peer_reviewed = EXCLUDED.peer_reviewed`, [id, journal_issn || null, journal_frequency || 'monthly', journal_peer_reviewed || false]);
+       await client.query(
+         `INSERT INTO periodical_metadata(resource_id, periodical_issn, periodical_frequency, peer_reviewed)
+          VALUES ($1, $2, $3, $4)
+          ON CONFLICT (resource_id) DO UPDATE SET
+            periodical_issn = EXCLUDED.periodical_issn,
+            periodical_frequency = EXCLUDED.periodical_frequency,
+            peer_reviewed = EXCLUDED.peer_reviewed`,
+         [id, normalizedIssn || null, journal_frequency || 'monthly', journal_peer_reviewed || false]
+       );
     }
     if (['e_article', 'digital_article'].includes(tipo) && journal_id) {
        await client.query(`INSERT INTO digital_articles(resource_child_id, resource_parent_id, digital_article_issue, digital_article_volume, digital_article_year) VALUES ($1, $2, $3, $4, $5) ON CONFLICT (resource_child_id) DO UPDATE SET resource_parent_id = EXCLUDED.resource_parent_id, digital_article_issue = EXCLUDED.digital_article_issue, digital_article_volume = EXCLUDED.digital_article_volume, digital_article_year = EXCLUDED.digital_article_year`, [id, journal_id, article_issue || null, article_volume || null, article_year || null]);
@@ -510,7 +608,9 @@ app.put("/resources/:id", async (req, res) => {
   } catch (err) {
     await client.query('ROLLBACK');
     console.error(err);
-    res.status(500).json({ message: "Failed to update resource" });
+    const mapped = pgErrorToClientError(err);
+    if (mapped) return res.status(mapped.status).json({ message: mapped.message });
+    res.status(500).json({ message: "Error interno al actualizar el recurso." });
   } finally {
     client.release();
   }

@@ -125,6 +125,9 @@ function Libros() {
   const [recursoActivo, setRecursoActivo] = useState(null);
   const [ejemplares, setEjemplares] = useState([]);
   const [nuevoEjemplar, setNuevoEjemplar] = useState({ barcode: "", location_code: "", health_state: "good", op_state: "available" });
+  const [formErrors, setFormErrors] = useState({});
+  const errorInputStyle = { border: "1.5px solid #d32f2f", background: "#fff5f5" };
+  const errorTextStyle = { color: "#d32f2f", fontSize: "12px", marginTop: "4px" };
 
   useEffect(() => {
     if (!getToken()) navigate("/");
@@ -218,8 +221,31 @@ function Libros() {
   };
 
   const handleGuardarRecurso = async () => {
-    if (!recursoEditando?.titulo || !recursoEditando?.tipo) {
-      alert("Por favor indique el Título y Tipo del recurso."); return;
+    const errs = {};
+    if (!recursoEditando?.titulo?.trim()) errs.titulo = "El título es obligatorio.";
+    if (!recursoEditando?.tipo) errs.tipo = "El tipo de recurso es obligatorio.";
+    if (recursoEditando?.autor_id === "nuevo") {
+      const nombre = (recursoEditando?.nuevo_autor_nombre || "").trim();
+      const apellido = (recursoEditando?.nuevo_autor_apellido || "").trim();
+      if (!nombre) errs.nuevo_autor_nombre = "Debes escribir el/los nombre(s) del autor.";
+      if (!apellido) errs.nuevo_autor_apellido = "Debes escribir el/los apellido(s) del autor.";
+    }
+    if (recursoEditando?.editorial_id === "nuevo" && !(recursoEditando?.nueva_editorial || "").trim()) {
+      errs.nueva_editorial = "Debes escribir el nombre de la nueva editorial.";
+    }
+    if (recursoEditando?.tipo === "book" && recursoEditando?.isbn && String(recursoEditando.isbn).replace(/-/g, "").length > 13) {
+      errs.isbn = "El ISBN no debe exceder 13 caracteres (sin guiones).";
+    }
+    if (['e_journal', 'e_magazine', 'journal_magazine'].includes(recursoEditando?.tipo) && recursoEditando?.journal_issn && String(recursoEditando.journal_issn).replace(/-/g, "").length > 8) {
+      errs.journal_issn = "El ISSN no debe exceder 8 caracteres (sin guiones).";
+    }
+    if (['video', 'audio_music'].includes(recursoEditando?.tipo) && recursoEditando?.audiovisual_minutes !== "" && Number(recursoEditando?.audiovisual_minutes) <= 0) {
+      errs.audiovisual_minutes = "La duración debe ser mayor a 0 minutos.";
+    }
+    setFormErrors(errs);
+    if (Object.keys(errs).length > 0) {
+      alert("Corrige los campos marcados en rojo para guardar el recurso.");
+      return;
     }
     try {
       const token = getToken();
@@ -230,8 +256,8 @@ function Libros() {
       }
       setModalRecursoAbierto(false);
       fetchRecursos();
-    } catch {
-      alert("Error al guardar el recurso");
+    } catch (err) {
+      alert(err?.message || "Error al guardar el recurso");
     }
   };
 
@@ -467,7 +493,39 @@ function Libros() {
         {hasManagementRole && (
           <button
             className="btn-flotante"
-            onClick={() => { setRecursoEditando({ titulo: "", tipo: "book", disponible: true, autor_id: "", editorial_id: "", generos_ids: [], lenguajes_ids: [], isbn: "", edicion: "", sinopsis: "", costo: 0, ano_publicacion: "", portada: null }); setModalRecursoAbierto(true); }}
+            onClick={() => {
+              setFormErrors({});
+              setRecursoEditando({
+                titulo: "",
+                tipo: "book",
+                disponible: true,
+                autor_id: "",
+                nuevo_autor_nombre: "",
+                nuevo_autor_apellido: "",
+                editorial_id: "",
+                nueva_editorial: "",
+                lenguaje_principal_id: "",
+                generos_ids: [],
+                lenguajes_ids: [],
+                isbn: "",
+                edicion: "",
+                sinopsis: "",
+                costo: 0,
+                ano_publicacion: "",
+                // Publicación periódica (e-journal / magazines)
+                journal_issn: "",
+                journal_frequency: "monthly",
+                journal_peer_reviewed: false,
+                // Audiovisual
+                audiovisual_minutes: "",
+                // Mapa
+                maps_scale: "",
+                maps_projection_type: "",
+                maps_type: "",
+                portada: null,
+              });
+              setModalRecursoAbierto(true);
+            }}
           >
             <img src={buttonCirculo} alt="agregar" className="btn-flotante-icon" />
           </button>
@@ -477,7 +535,7 @@ function Libros() {
         {modalRecursoAbierto && (
           <div className="modal-overlay" onClick={() => setModalRecursoAbierto(false)}>
             <div className="modal-card" style={{ maxWidth: "860px", width: "90vw" }} onClick={e => e.stopPropagation()}>
-              <button className="modal-cerrar" onClick={() => setModalRecursoAbierto(false)}>✕</button>
+              <button className="modal-cerrar" onClick={() => { setModalRecursoAbierto(false); setFormErrors({}); }}>✕</button>
               <div className="modal-header">
                 <h2 className="modal-titulo">{recursoEditando?.id ? "Editar Recurso" : "Registrar Nuevo Recurso"}</h2>
               </div>
@@ -512,34 +570,93 @@ function Libros() {
                 </div>
 
                 <label className="detail-label">Título *</label>
-                <input type="text" value={recursoEditando?.titulo || ""} onChange={e => setRecursoEditando({ ...recursoEditando, titulo: e.target.value })} className="modal-input" />
+                <input type="text" value={recursoEditando?.titulo || ""} onChange={e => { setRecursoEditando({ ...recursoEditando, titulo: e.target.value }); setFormErrors(prev => ({ ...prev, titulo: null })); }} className="modal-input" style={formErrors.titulo ? errorInputStyle : undefined} />
+                {formErrors.titulo && <div style={errorTextStyle}>{formErrors.titulo}</div>}
                 <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "15px" }}>
                   <div>
                     <label className="detail-label">Tipo *</label>
-                    <select className="modal-input" value={recursoEditando?.tipo || "book"} onChange={e => setRecursoEditando({ ...recursoEditando, tipo: e.target.value })}>
+                    <select className="modal-input" value={recursoEditando?.tipo || "book"} onChange={e => { setRecursoEditando({ ...recursoEditando, tipo: e.target.value }); setFormErrors(prev => ({ ...prev, tipo: null })); }} style={formErrors.tipo ? errorInputStyle : undefined}>
                       <option value="book">Book</option>
+                      <option value="journal_magazine">Journal / Magazine</option>
                       <option value="e_journal">E-Journal</option>
+                      <option value="e_magazine">E-Magazine</option>
                       <option value="thesis_dissertation">Thesis / Dissertation</option>
                       <option value="reference">Reference</option>
                       <option value="digital_article">Digital Article</option>
+                      <option value="e_article">E-Article</option>
                       <option value="e_book">E-Book</option>
                       <option value="video">Video</option>
                       <option value="audio_music">Audio / Music</option>
+                      <option value="map">Map</option>
                     </select>
+                    {formErrors.tipo && <div style={errorTextStyle}>{formErrors.tipo}</div>}
                   </div>
                   <div>
                     <label className="detail-label">Autor</label>
-                    <select className="modal-input" value={recursoEditando?.autor_id || ""} onChange={e => setRecursoEditando({ ...recursoEditando, autor_id: e.target.value ? Number(e.target.value) : "" })}>
+                    <select
+                      className="modal-input"
+                      value={recursoEditando?.autor_id || ""}
+                      onChange={e => setRecursoEditando({
+                        ...recursoEditando,
+                        autor_id: e.target.value === "nuevo" ? "nuevo" : (e.target.value ? Number(e.target.value) : ""),
+                      })}
+                    >
                       <option value="">Desconocido...</option>
+                      <option value="nuevo">➕ Registrar Nuevo Autor...</option>
                       {metadata.authors.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
                     </select>
+                    {recursoEditando?.autor_id === "nuevo" && (
+                      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px", marginTop: "5px" }}>
+                        <div>
+                          <input
+                            type="text"
+                            placeholder="Nombre(s) del autor"
+                            className="modal-input"
+                            value={recursoEditando?.nuevo_autor_nombre || ""}
+                            onChange={e => { setRecursoEditando({ ...recursoEditando, nuevo_autor_nombre: e.target.value }); setFormErrors(prev => ({ ...prev, nuevo_autor_nombre: null })); }}
+                            style={formErrors.nuevo_autor_nombre ? errorInputStyle : undefined}
+                          />
+                          {formErrors.nuevo_autor_nombre && <div style={errorTextStyle}>{formErrors.nuevo_autor_nombre}</div>}
+                        </div>
+                        <div>
+                          <input
+                            type="text"
+                            placeholder="Apellido(s) del autor"
+                            className="modal-input"
+                            value={recursoEditando?.nuevo_autor_apellido || ""}
+                            onChange={e => { setRecursoEditando({ ...recursoEditando, nuevo_autor_apellido: e.target.value }); setFormErrors(prev => ({ ...prev, nuevo_autor_apellido: null })); }}
+                            style={formErrors.nuevo_autor_apellido ? errorInputStyle : undefined}
+                          />
+                          {formErrors.nuevo_autor_apellido && <div style={errorTextStyle}>{formErrors.nuevo_autor_apellido}</div>}
+                        </div>
+                      </div>
+                    )}
                   </div>
                   <div>
                     <label className="detail-label">Editorial</label>
-                    <select className="modal-input" value={recursoEditando?.editorial_id || ""} onChange={e => setRecursoEditando({ ...recursoEditando, editorial_id: e.target.value ? Number(e.target.value) : "" })}>
+                    <select
+                      className="modal-input"
+                      value={recursoEditando?.editorial_id || ""}
+                      onChange={e => setRecursoEditando({
+                        ...recursoEditando,
+                        editorial_id: e.target.value === "nuevo" ? "nuevo" : (e.target.value ? Number(e.target.value) : ""),
+                      })}
+                    >
                       <option value="">Desconocida...</option>
+                      <option value="nuevo">➕ Registrar Nueva Editorial...</option>
                       {metadata.publishers.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
                     </select>
+                    {recursoEditando?.editorial_id === "nuevo" && (
+                      <input
+                        type="text"
+                        placeholder="Nombre de la editorial"
+                        className="modal-input"
+                        value={recursoEditando?.nueva_editorial || ""}
+                        onChange={e => { setRecursoEditando({ ...recursoEditando, nueva_editorial: e.target.value }); setFormErrors(prev => ({ ...prev, nueva_editorial: null })); }}
+                        style={{ marginTop: "5px", ...(formErrors.nueva_editorial ? errorInputStyle : {}) }}
+                      />
+                    )}
+                    {formErrors.nueva_editorial && <div style={errorTextStyle}>{formErrors.nueva_editorial}</div>}
                   </div>
                   <div>
                     <label className="detail-label">Año</label>
@@ -550,9 +667,111 @@ function Libros() {
                   <div style={{ background: "#fffde7", padding: "15px", borderRadius: "5px", marginTop: "10px", marginBottom: "10px", border: "1px dashed #FFD400" }}>
                     <h4 style={{ marginBottom: "10px", color: "#666" }}>Metadata del Libro</h4>
                     <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px" }}>
-                      <input type="text" placeholder="ISBN" className="modal-input" value={recursoEditando?.isbn || ""} onChange={e => setRecursoEditando({ ...recursoEditando, isbn: e.target.value })} />
+                      <input type="text" placeholder="ISBN" className="modal-input" value={recursoEditando?.isbn || ""} onChange={e => { setRecursoEditando({ ...recursoEditando, isbn: e.target.value }); setFormErrors(prev => ({ ...prev, isbn: null })); }} style={formErrors.isbn ? errorInputStyle : undefined} />
+                      {formErrors.isbn && <div style={errorTextStyle}>{formErrors.isbn}</div>}
                       <input type="number" placeholder="Edición" className="modal-input" value={recursoEditando?.edicion || ""} onChange={e => setRecursoEditando({ ...recursoEditando, edicion: Number(e.target.value) })} />
                       <textarea placeholder="Sinópsis..." className="modal-input" style={{ gridColumn: "span 2", minHeight: "60px" }} value={recursoEditando?.sinopsis || ""} onChange={e => setRecursoEditando({ ...recursoEditando, sinopsis: e.target.value })} />
+                    </div>
+                  </div>
+                )}
+
+                <label className="detail-label">Lenguaje Principal (Primario)</label>
+                <select
+                  className="modal-input"
+                  value={recursoEditando?.lenguaje_principal_id || ""}
+                  onChange={e => setRecursoEditando({ ...recursoEditando, lenguaje_principal_id: e.target.value ? Number(e.target.value) : "" })}
+                >
+                  <option value="">Desconocido / Ninguno</option>
+                  {metadata.languages.map(l => <option key={l.id} value={l.id}>{l.name}</option>)}
+                </select>
+
+                {['e_journal', 'e_magazine', 'journal_magazine'].includes(recursoEditando?.tipo) && (
+                  <div style={{ background: "#e8eaf6", padding: "15px", borderRadius: "5px", marginBottom: "15px", marginTop: "10px", border: "1px dashed #5c6bc0" }}>
+                    <h4 style={{ marginBottom: "10px", color: "#666" }}>Metadata de Publicación Periódica</h4>
+                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px" }}>
+                      <input
+                        type="text"
+                        placeholder="ISSN (8 caracteres)"
+                        className="modal-input"
+                        value={recursoEditando?.journal_issn || ""}
+                        onChange={e => { setRecursoEditando({ ...recursoEditando, journal_issn: e.target.value }); setFormErrors(prev => ({ ...prev, journal_issn: null })); }}
+                        style={formErrors.journal_issn ? errorInputStyle : undefined}
+                      />
+                      {formErrors.journal_issn && <div style={errorTextStyle}>{formErrors.journal_issn}</div>}
+                      <select
+                        className="modal-input"
+                        value={recursoEditando?.journal_frequency || "monthly"}
+                        onChange={e => setRecursoEditando({ ...recursoEditando, journal_frequency: e.target.value })}
+                      >
+                        <option value="daily">Diario</option>
+                        <option value="weekly">Semanal</option>
+                        <option value="monthly">Mensual</option>
+                        <option value="quarterly">Trimestral</option>
+                        <option value="annually">Anual</option>
+                      </select>
+                    </div>
+                    <label style={{ display: "flex", alignItems: "center", gap: "10px", marginTop: "10px", cursor: "pointer", fontSize: "14px" }}>
+                      <input
+                        type="checkbox"
+                        checked={recursoEditando?.journal_peer_reviewed ?? false}
+                        onChange={e => setRecursoEditando({ ...recursoEditando, journal_peer_reviewed: e.target.checked })}
+                      />
+                      ¿Es revisado por pares? (Peer Reviewed)
+                    </label>
+                  </div>
+                )}
+
+                {['video', 'audio_music'].includes(recursoEditando?.tipo) && (
+                  <div style={{ background: "#f3e5f5", padding: "15px", borderRadius: "5px", marginBottom: "15px", marginTop: "10px", border: "1px dashed #ab47bc" }}>
+                    <h4 style={{ marginBottom: "10px", color: "#666" }}>Metadata Audiovisual</h4>
+                    <input
+                      type="number"
+                      min="1"
+                      placeholder="Duración (Minutos)"
+                      className="modal-input"
+                      value={recursoEditando?.audiovisual_minutes || ""}
+                      onChange={e => { setRecursoEditando({ ...recursoEditando, audiovisual_minutes: Number(e.target.value) }); setFormErrors(prev => ({ ...prev, audiovisual_minutes: null })); }}
+                      style={formErrors.audiovisual_minutes ? errorInputStyle : undefined}
+                    />
+                    {formErrors.audiovisual_minutes && <div style={errorTextStyle}>{formErrors.audiovisual_minutes}</div>}
+                  </div>
+                )}
+
+                {recursoEditando?.tipo === 'map' && (
+                  <div style={{ background: "#fff3e0", padding: "15px", borderRadius: "5px", marginBottom: "15px", marginTop: "10px", border: "1px dashed #ff9800" }}>
+                    <h4 style={{ marginBottom: "10px", color: "#666" }}>Metadata de Mapa</h4>
+                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px" }}>
+                      <input
+                        type="text"
+                        placeholder="Escala (Ej: 1:1000)"
+                        className="modal-input"
+                        value={recursoEditando?.maps_scale || ""}
+                        onChange={e => setRecursoEditando({ ...recursoEditando, maps_scale: e.target.value })}
+                      />
+                      <input
+                        type="text"
+                        placeholder="Tipo de proyección"
+                        className="modal-input"
+                        value={recursoEditando?.maps_projection_type || ""}
+                        onChange={e => setRecursoEditando({ ...recursoEditando, maps_projection_type: (e.target.value || "").toLowerCase() })}
+                      />
+                      <select
+                        className="modal-input"
+                        style={{ gridColumn: "span 2" }}
+                        value={recursoEditando?.maps_type || ""}
+                        onChange={e => setRecursoEditando({ ...recursoEditando, maps_type: e.target.value })}
+                      >
+                        <option value="">Tipo de mapa (opcional)</option>
+                        <option value="topograhpic">topograhpic</option>
+                        <option value="thematic">thematic</option>
+                        <option value="political">political</option>
+                        <option value="road">road</option>
+                        <option value="nautical">nautical</option>
+                        <option value="aeronautical">aeronautical</option>
+                        <option value="cadastral">cadastral</option>
+                        <option value="satellite">satellite</option>
+                        <option value="other">other</option>
+                      </select>
                     </div>
                   </div>
                 )}
@@ -562,7 +781,7 @@ function Libros() {
                     <label key={c.id}><input type="checkbox" checked={(recursoEditando?.generos_ids || []).includes(c.id)} onChange={e => toggleGenero(c.id, e.target.checked)} /> {c.name}</label>
                   ))}
                 </div>
-                <label className="detail-label">Lenguajes</label>
+                <label className="detail-label">Lenguajes de Apoyo</label>
                 <div className="checkbox-group">
                   {metadata.languages.map(l => (
                     <label key={l.id}><input type="checkbox" checked={(recursoEditando?.lenguajes_ids || []).includes(l.id)} onChange={e => toggleLenguaje(l.id, e.target.checked)} /> {l.name}</label>
@@ -574,7 +793,7 @@ function Libros() {
                 </label>
               </div>
               <div className="modal-botones" style={{ marginTop: "20px" }}>
-                <button className="modal-cancelar" onClick={() => setModalRecursoAbierto(false)}>Cancelar</button>
+                <button className="modal-cancelar" onClick={() => { setModalRecursoAbierto(false); setFormErrors({}); }}>Cancelar</button>
                 <button className="modal-confirmar" onClick={handleGuardarRecurso}>Guardar Cambios</button>
               </div>
             </div>

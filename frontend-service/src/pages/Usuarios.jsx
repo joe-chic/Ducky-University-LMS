@@ -22,6 +22,8 @@ function Usuarios() {
   const registrosPorPagina = 10;
   const [usuarios, setUsuarios] = useState([]);
   const [totalUsuarios, setTotalUsuarios] = useState(0);
+  const [loadingUsuarios, setLoadingUsuarios] = useState(false);
+  const [errorUsuarios, setErrorUsuarios] = useState(null);
   const [refreshKey, setRefreshKey] = useState(0);
 
   const userRole = localStorage.getItem("ducky_role");
@@ -30,6 +32,10 @@ function Usuarios() {
   useEffect(() => {
     if (!isAdmin) navigate("/home");
   }, [isAdmin, navigate]);
+
+  useEffect(() => {
+    if (!getToken()) navigate("/");
+  }, [navigate]);
 
   const [permisos, setPermisos] = useState(permisosIniciales);
   const [rolesAbiertos, setRolesAbiertos] = useState({});
@@ -46,6 +52,8 @@ function Usuarios() {
     async function run() {
       const token = getToken();
       try {
+        setLoadingUsuarios(true);
+        setErrorUsuarios(null);
         const data = await bffGet("/api/users", { token, params: { search: busqueda, page: paginaActual, pageSize: registrosPorPagina } });
         if (cancelled) return;
         setUsuarios(data.items || []);
@@ -53,8 +61,11 @@ function Usuarios() {
       } catch (err) {
         console.error(err);
         if (cancelled) return;
+        setErrorUsuarios(err?.message || "No se pudieron cargar los usuarios.");
         setUsuarios([]);
         setTotalUsuarios(0);
+      } finally {
+        if (!cancelled) setLoadingUsuarios(false);
       }
     }
     run();
@@ -122,68 +133,75 @@ function Usuarios() {
             </div>
 
             <div className="usuarios-lista">
-              {usuarios.reduce((acc, usuario, index) => {
-                const currentLetter = (usuario.nombre?.[0] || "#").toUpperCase();
-                const prevLetter = index > 0 ? (usuarios[index - 1].nombre?.[0] || "#").toUpperCase() : null;
-                if (!busqueda.trim() && currentLetter !== prevLetter) {
+              {loadingUsuarios ? (
+                <div style={{ textAlign: "center", padding: "40px", color: "#666" }}>Cargando...</div>
+              ) : usuarios.length === 0 ? (
+                <div style={{ textAlign: "center", padding: "40px", color: "#999" }}>
+                  {errorUsuarios || "No se encontraron usuarios."}
+                </div>
+              ) : (
+                usuarios.reduce((acc, usuario, index) => {
+                  const currentLetter = (usuario.nombre?.[0] || "#").toUpperCase();
+                  const prevLetter = index > 0 ? (usuarios[index - 1].nombre?.[0] || "#").toUpperCase() : null;
+                  if (!busqueda.trim() && currentLetter !== prevLetter) {
+                    acc.push(
+                      <div key={`letter-${currentLetter}`} style={{ width: "100%", margin: "20px 0 10px 0", padding: "0 10px" }}>
+                        <h2 style={{ margin: 0, color: "#b8860b", borderBottom: "2px solid #e0e0e0", paddingBottom: "5px", fontSize: "1.4rem" }}>
+                          {currentLetter}
+                        </h2>
+                      </div>
+                    );
+                  }
                   acc.push(
-                    <div key={`letter-${currentLetter}`} style={{ width: "100%", margin: "20px 0 10px 0", padding: "0 10px" }}>
-                      <h2 style={{ margin: 0, color: "#b8860b", borderBottom: "2px solid #e0e0e0", paddingBottom: "5px", fontSize: "1.4rem" }}>
-                        {currentLetter}
-                      </h2>
+                    <div className="usuario-card" key={usuario.id}>
+                      <div className="usuario-avatar">
+                        <img src={usuario.foto || userIcon} alt={usuario.nombre} className="usuario-foto" />
+                      </div>
+                      <div className="usuario-info">
+                        <p className="usuario-nombre">{usuario.nombre}</p>
+                        <p className="usuario-rol">{usuario.rol}</p>
+                        <p className="usuario-correo">{usuario.correo}</p>
+                        <p className="usuario-telefono">{usuario.telefono}</p>
+                      </div>
+                      <div className="usuario-actions">
+                        <span className={usuario.activo ? "badge-activo" : "badge-inactivo"}>{usuario.activo ? "Activo" : "Inactivo"}</span>
+                        <button
+                          className="btn-action"
+                          onClick={() => {
+                            setUsuarioEditando(usuario);
+                            setNuevoUsuario({ nombre: usuario.nombre, rol: usuario.rol, correo: usuario.correo, contrasena: "", matricula: usuario.matricula || "", foto: null });
+                            setModalAbierto(true);
+                          }}
+                        >
+                          <img src={updateIcon} alt="editar" className="btn-icon" /> Editar
+                        </button>
+                        <button
+                          className="btn-action"
+                          onClick={async () => {
+                            const accion = usuario.activo ? "deshabilitar" : "habilitar";
+                            if (!window.confirm(`¿Seguro que deseas ${accion} este usuario?`)) return;
+                            try {
+                              const token = getToken();
+                              if (usuario.activo) {
+                                await bffDelete(`/api/users/${usuario.id}`, { token });
+                                setUsuarios(prev => prev.map(u => u.id === usuario.id ? { ...u, activo: false } : u));
+                              } else {
+                                await bffPut(`/api/users/${usuario.id}`, { nombre: usuario.nombre, rol: usuario.rol, correo: usuario.correo, activo: true }, { token });
+                                setUsuarios(prev => prev.map(u => u.id === usuario.id ? { ...u, activo: true } : u));
+                              }
+                            } catch (err) {
+                              alert(err.message || `No se pudo ${accion} el usuario`);
+                            }
+                          }}
+                        >
+                          <img src={usuario.activo ? noIcon : checkIcon} alt={usuario.activo ? "deshabilitar" : "habilitar"} className="btn-icon" />
+                          {usuario.activo ? "Deshabilitar" : "Habilitar"}
+                        </button>
+                      </div>
                     </div>
                   );
-                }
-                acc.push(
-                <div className="usuario-card" key={usuario.id}>
-                  <div className="usuario-avatar">
-                    <img src={usuario.foto || userIcon} alt={usuario.nombre} className="usuario-foto" />
-                  </div>
-                  <div className="usuario-info">
-                    <p className="usuario-nombre">{usuario.nombre}</p>
-                    <p className="usuario-rol">{usuario.rol}</p>
-                    <p className="usuario-correo">{usuario.correo}</p>
-                    <p className="usuario-telefono">{usuario.telefono}</p>
-                  </div>
-                  <div className="usuario-actions">
-                    <span className={usuario.activo ? "badge-activo" : "badge-inactivo"}>{usuario.activo ? "Activo" : "Inactivo"}</span>
-                    <button
-                      className="btn-action"
-                      onClick={() => {
-                        setUsuarioEditando(usuario);
-                        setNuevoUsuario({ nombre: usuario.nombre, rol: usuario.rol, correo: usuario.correo, contrasena: "", matricula: usuario.matricula || "", foto: null });
-                        setModalAbierto(true);
-                      }}
-                    >
-                      <img src={updateIcon} alt="editar" className="btn-icon" /> Editar
-                    </button>
-                    <button
-                      className="btn-action"
-                      onClick={async () => {
-                        const accion = usuario.activo ? "deshabilitar" : "habilitar";
-                        if (!window.confirm(`¿Seguro que deseas ${accion} este usuario?`)) return;
-                        try {
-                          const token = getToken();
-                          if (usuario.activo) {
-                            await bffDelete(`/api/users/${usuario.id}`, { token });
-                            setUsuarios(prev => prev.map(u => u.id === usuario.id ? { ...u, activo: false } : u));
-                          } else {
-                            await bffPut(`/api/users/${usuario.id}`, { nombre: usuario.nombre, rol: usuario.rol, correo: usuario.correo, activo: true }, { token });
-                            setUsuarios(prev => prev.map(u => u.id === usuario.id ? { ...u, activo: true } : u));
-                          }
-                        } catch (err) {
-                          alert(err.message || `No se pudo ${accion} el usuario`);
-                        }
-                      }}
-                    >
-                      <img src={usuario.activo ? noIcon : checkIcon} alt={usuario.activo ? "deshabilitar" : "habilitar"} className="btn-icon" />
-                      {usuario.activo ? "Deshabilitar" : "Habilitar"}
-                    </button>
-                  </div>
-                </div>
-                  );
                   return acc;
-                }, [])}
+                }, []) ) }
             </div>
 
             {totalPaginas > 1 && (

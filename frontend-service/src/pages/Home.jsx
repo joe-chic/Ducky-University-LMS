@@ -34,6 +34,10 @@ function Home() {
   const [recursoActivo, setRecursoActivo] = useState(null);
   const [ejemplares, setEjemplares] = useState([]);
   const [nuevoEjemplar, setNuevoEjemplar] = useState({ barcode: "", location_code: "", health_state: "good", op_state: "available" });
+  const [formErrors, setFormErrors] = useState({});
+
+  const errorInputStyle = { border: "1.5px solid #d32f2f", background: "#fff5f5" };
+  const errorTextStyle = { color: "#d32f2f", fontSize: "12px", marginTop: "4px" };
 
   useEffect(() => {
     async function loadMetadata() {
@@ -73,8 +77,31 @@ function Home() {
   }, [busqueda, page]);
 
   const handleGuardarRecurso = async () => {
-    if (!recursoEditando || !recursoEditando.titulo || !recursoEditando.tipo) {
-      alert("Por favor indique el Título y Tipo del recurso.");
+    const errs = {};
+    if (!recursoEditando?.titulo?.trim()) errs.titulo = "El título es obligatorio.";
+    if (!recursoEditando?.tipo) errs.tipo = "El tipo de recurso es obligatorio.";
+    if (recursoEditando?.autor_id === "nuevo") {
+      const nombre = (recursoEditando?.nuevo_autor_nombre || "").trim();
+      const apellido = (recursoEditando?.nuevo_autor_apellido || "").trim();
+      if (!nombre) errs.nuevo_autor_nombre = "Debes escribir el/los nombre(s) del autor.";
+      if (!apellido) errs.nuevo_autor_apellido = "Debes escribir el/los apellido(s) del autor.";
+    }
+    if (recursoEditando?.editorial_id === "nuevo" && !(recursoEditando?.nueva_editorial || "").trim()) {
+      errs.nueva_editorial = "Debes escribir el nombre de la nueva editorial.";
+    }
+    if (recursoEditando?.tipo === "book" && recursoEditando?.isbn && String(recursoEditando.isbn).replace(/-/g, "").length > 13) {
+      errs.isbn = "El ISBN no debe exceder 13 caracteres (sin guiones).";
+    }
+    if (['e_journal', 'e_magazine', 'journal_magazine'].includes(recursoEditando?.tipo) && recursoEditando?.journal_issn && String(recursoEditando.journal_issn).replace(/-/g, "").length > 8) {
+      errs.journal_issn = "El ISSN no debe exceder 8 caracteres (sin guiones).";
+    }
+    if (['video', 'audio_music'].includes(recursoEditando?.tipo) && recursoEditando?.audiovisual_minutes !== "" && Number(recursoEditando?.audiovisual_minutes) <= 0) {
+      errs.audiovisual_minutes = "La duración debe ser mayor a 0 minutos.";
+    }
+
+    setFormErrors(errs);
+    if (Object.keys(errs).length > 0) {
+      alert("Corrige los campos marcados en rojo para guardar el recurso.");
       return;
     }
     try {
@@ -87,7 +114,7 @@ function Home() {
       setModalRecursoAbierto(false);
       fetchRecursos({ cancelled: false });
     } catch (err) {
-      alert("Error al guardar el recurso");
+      alert(err?.message || "Error al guardar el recurso");
     }
   };
 
@@ -178,7 +205,23 @@ function Home() {
             </h2>
             {isManagementView && (
               <button className="btn-action" style={{ backgroundColor: "#4CAF50", color: "white" }} onClick={() => {
-                setRecursoEditando({ titulo: "", tipo: "book", disponible: true, autor_id: "", editorial_id: "", generos_ids: [], lenguajes_ids: [], isbn: "", edicion: "", sinopsis: "", costo: 0, ano_publicacion: "" });
+                setRecursoEditando({
+                  titulo: "",
+                  tipo: "book",
+                  disponible: true,
+                  autor_id: "",
+                  nuevo_autor_nombre: "",
+                  nuevo_autor_apellido: "",
+                  editorial_id: "",
+                  generos_ids: [],
+                  lenguajes_ids: [],
+                  isbn: "",
+                  edicion: "",
+                  sinopsis: "",
+                  costo: 0,
+                  ano_publicacion: "",
+                });
+                setFormErrors({});
                 setModalRecursoAbierto(true);
               }}>
                 ➕ Agregar Recurso
@@ -256,42 +299,85 @@ function Home() {
       {modalRecursoAbierto && (
         <div className="modal-overlay" onClick={() => setModalRecursoAbierto(false)}>
           <div className="modal-card" style={{ maxWidth: "860px", width: "90vw" }} onClick={(e) => e.stopPropagation()}>
-            <button className="modal-cerrar" onClick={() => setModalRecursoAbierto(false)}>✕</button>
+            <button className="modal-cerrar" onClick={() => { setModalRecursoAbierto(false); setFormErrors({}); }}>✕</button>
             <div className="modal-header">
               <h2 className="modal-titulo">{recursoEditando?.id ? "Editar Información del Recurso" : "Registrar Nuevo Recurso"}</h2>
             </div>
             <div className="modal-form" style={{ maxHeight: "72vh", overflowY: "auto", paddingRight: "10px" }}>
               <label className="detail-label">Título *</label>
-              <input type="text" value={recursoEditando?.titulo || ""} onChange={(e) => setRecursoEditando({ ...recursoEditando, titulo: e.target.value })} className="modal-input" />
+              <input type="text" value={recursoEditando?.titulo || ""} onChange={(e) => { setRecursoEditando({ ...recursoEditando, titulo: e.target.value }); setFormErrors(prev => ({ ...prev, titulo: null })); }} className="modal-input" style={formErrors.titulo ? errorInputStyle : undefined} />
+              {formErrors.titulo && <div style={errorTextStyle}>{formErrors.titulo}</div>}
 
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "15px" }}>
                 <div>
                   <label className="detail-label">Tipo de Recurso *</label>
-                  <select className="modal-input" disabled={!!recursoEditando?.id} value={recursoEditando?.tipo || "book"} onChange={(e) => setRecursoEditando({ ...recursoEditando, tipo: e.target.value })}>
+                  <select className="modal-input" disabled={!!recursoEditando?.id} value={recursoEditando?.tipo || "book"} onChange={(e) => { setRecursoEditando({ ...recursoEditando, tipo: e.target.value }); setFormErrors(prev => ({ ...prev, tipo: null })); }} style={formErrors.tipo ? errorInputStyle : undefined}>
                     <option value="book">Book</option>
                     <option value="journal_magazine">Journal / Magazine</option>
+                    <option value="e_journal">E-Journal</option>
+                    <option value="e_magazine">E-Magazine</option>
                     <option value="thesis_dissertation">Thesis / Dissertation</option>
                     <option value="reference">Reference</option>
                     <option value="digital_article">Digital Article</option>
+                    <option value="e_article">E-Article</option>
                     <option value="e_book">E-Book</option>
                     <option value="video">Video</option>
                     <option value="audio_music">Audio / Music</option>
                     <option value="map">Map</option>
                   </select>
+                  {formErrors.tipo && <div style={errorTextStyle}>{formErrors.tipo}</div>}
                 </div>
                 <div>
                   <label className="detail-label">Autor</label>
-                  <select className="modal-input" value={recursoEditando?.autor_id || ""} onChange={(e) => setRecursoEditando({ ...recursoEditando, autor_id: e.target.value ? Number(e.target.value) : "" })}>
+                  <select className="modal-input" value={recursoEditando?.autor_id || ""} onChange={(e) => setRecursoEditando({ ...recursoEditando, autor_id: e.target.value === "nuevo" ? "nuevo" : (e.target.value ? Number(e.target.value) : "") })}>
                     <option value="">Desconocido...</option>
+                    <option value="nuevo">➕ Registrar Nuevo Autor...</option>
                     {metadata.authors.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
                   </select>
+                  {recursoEditando?.autor_id === "nuevo" && (
+                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px", marginTop: "5px" }}>
+                      <div>
+                        <input
+                          type="text"
+                          placeholder="Nombre(s) del autor"
+                          className="modal-input"
+                          style={formErrors.nuevo_autor_nombre ? errorInputStyle : undefined}
+                          value={recursoEditando?.nuevo_autor_nombre || ""}
+                          onChange={e => {
+                            setRecursoEditando({ ...recursoEditando, nuevo_autor_nombre: e.target.value });
+                            setFormErrors(prev => ({ ...prev, nuevo_autor_nombre: null }));
+                          }}
+                        />
+                        {formErrors.nuevo_autor_nombre && <div style={errorTextStyle}>{formErrors.nuevo_autor_nombre}</div>}
+                      </div>
+                      <div>
+                        <input
+                          type="text"
+                          placeholder="Apellido(s) del autor"
+                          className="modal-input"
+                          style={formErrors.nuevo_autor_apellido ? errorInputStyle : undefined}
+                          value={recursoEditando?.nuevo_autor_apellido || ""}
+                          onChange={e => {
+                            setRecursoEditando({ ...recursoEditando, nuevo_autor_apellido: e.target.value });
+                            setFormErrors(prev => ({ ...prev, nuevo_autor_apellido: null }));
+                          }}
+                        />
+                        {formErrors.nuevo_autor_apellido && <div style={errorTextStyle}>{formErrors.nuevo_autor_apellido}</div>}
+                      </div>
+                    </div>
+                  )}
                 </div>
                 <div>
                   <label className="detail-label">Editorial</label>
-                  <select className="modal-input" value={recursoEditando?.editorial_id || ""} onChange={(e) => setRecursoEditando({ ...recursoEditando, editorial_id: e.target.value ? Number(e.target.value) : "" })}>
+                  <select className="modal-input" value={recursoEditando?.editorial_id || ""} onChange={(e) => setRecursoEditando({ ...recursoEditando, editorial_id: e.target.value === "nuevo" ? "nuevo" : (e.target.value ? Number(e.target.value) : "") })}>
                     <option value="">Desconocida...</option>
+                    <option value="nuevo">➕ Registrar Nueva Editorial...</option>
                     {metadata.publishers.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
                   </select>
+                  {recursoEditando?.editorial_id === "nuevo" && (
+                     <input type="text" placeholder="Nombre de la editorial" className="modal-input" style={{ marginTop: "5px", ...(formErrors.nueva_editorial ? errorInputStyle : {}) }} value={recursoEditando?.nueva_editorial || ""} onChange={e => { setRecursoEditando({...recursoEditando, nueva_editorial: e.target.value}); setFormErrors(prev => ({ ...prev, nueva_editorial: null })); }} />
+                  )}
+                  {formErrors.nueva_editorial && <div style={errorTextStyle}>{formErrors.nueva_editorial}</div>}
                 </div>
                 <div>
                   <label className="detail-label">Año de Publicación</label>
@@ -303,7 +389,8 @@ function Home() {
                 <div style={{ background: "#fffde7", padding: "15px", borderRadius: "5px", marginBottom: "15px", marginTop: "10px", border: "1px dashed #FFD400" }}>
                   <h4 style={{ marginBottom: "10px", color: "#666" }}>Metadata del Libro</h4>
                   <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px" }}>
-                    <input type="text" placeholder="ISBN (13 dígitos)" className="modal-input" value={recursoEditando?.isbn || ""} onChange={(e) => setRecursoEditando({ ...recursoEditando, isbn: e.target.value })} />
+                    <input type="text" placeholder="ISBN (13 dígitos)" className="modal-input" value={recursoEditando?.isbn || ""} onChange={(e) => { setRecursoEditando({ ...recursoEditando, isbn: e.target.value }); setFormErrors(prev => ({ ...prev, isbn: null })); }} style={formErrors.isbn ? errorInputStyle : undefined} />
+                    {formErrors.isbn && <div style={errorTextStyle}>{formErrors.isbn}</div>}
                     <input type="number" placeholder="Número de Edición" className="modal-input" value={recursoEditando?.edicion || ""} onChange={(e) => setRecursoEditando({ ...recursoEditando, edicion: Number(e.target.value) })} />
                     <textarea placeholder="Ingresa la Sinópsis..." className="modal-input" style={{ gridColumn: "span 2", minHeight: "60px" }} value={recursoEditando?.sinopsis || ""} onChange={(e) => setRecursoEditando({ ...recursoEditando, sinopsis: e.target.value })} />
                   </div>
@@ -321,7 +408,8 @@ function Home() {
                 <div style={{ background: "#e8eaf6", padding: "15px", borderRadius: "5px", marginBottom: "15px", marginTop: "10px", border: "1px dashed #5c6bc0" }}>
                   <h4 style={{ marginBottom: "10px", color: "#666" }}>Metadata de Publicación Periódica</h4>
                   <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px" }}>
-                    <input type="text" placeholder="ISSN (8 caracteres)" className="modal-input" value={recursoEditando?.journal_issn || ""} onChange={(e) => setRecursoEditando({ ...recursoEditando, journal_issn: e.target.value })} />
+                    <input type="text" placeholder="ISSN (8 caracteres)" className="modal-input" value={recursoEditando?.journal_issn || ""} onChange={(e) => { setRecursoEditando({ ...recursoEditando, journal_issn: e.target.value }); setFormErrors(prev => ({ ...prev, journal_issn: null })); }} style={formErrors.journal_issn ? errorInputStyle : undefined} />
+                    {formErrors.journal_issn && <div style={errorTextStyle}>{formErrors.journal_issn}</div>}
                     <select className="modal-input" value={recursoEditando?.journal_frequency || "monthly"} onChange={(e) => setRecursoEditando({ ...recursoEditando, journal_frequency: e.target.value })}>
                       <option value="daily">Diario</option>
                       <option value="weekly">Semanal</option>
@@ -352,7 +440,8 @@ function Home() {
               {['video', 'audio_music'].includes(recursoEditando?.tipo) && (
                 <div style={{ background: "#f3e5f5", padding: "15px", borderRadius: "5px", marginBottom: "15px", marginTop: "10px", border: "1px dashed #ab47bc" }}>
                   <h4 style={{ marginBottom: "10px", color: "#666" }}>Metadata Audiovisual</h4>
-                  <input type="number" placeholder="Duración (Minutos)" className="modal-input" value={recursoEditando?.audiovisual_minutes || ""} onChange={(e) => setRecursoEditando({ ...recursoEditando, audiovisual_minutes: Number(e.target.value) })} />
+                  <input type="number" placeholder="Duración (Minutos)" className="modal-input" value={recursoEditando?.audiovisual_minutes || ""} onChange={(e) => { setRecursoEditando({ ...recursoEditando, audiovisual_minutes: Number(e.target.value) }); setFormErrors(prev => ({ ...prev, audiovisual_minutes: null })); }} style={formErrors.audiovisual_minutes ? errorInputStyle : undefined} />
+                  {formErrors.audiovisual_minutes && <div style={errorTextStyle}>{formErrors.audiovisual_minutes}</div>}
                 </div>
               )}
 
@@ -398,7 +487,7 @@ function Home() {
               )}
             </div>
             <div className="modal-botones" style={{ marginTop: "20px" }}>
-              <button className="modal-cancelar" onClick={() => setModalRecursoAbierto(false)}>Cancelar</button>
+              <button className="modal-cancelar" onClick={() => { setModalRecursoAbierto(false); setFormErrors({}); }}>Cancelar</button>
               <button className="modal-confirmar" onClick={handleGuardarRecurso}>Guardar Cambios BD</button>
             </div>
           </div>
