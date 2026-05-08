@@ -56,7 +56,7 @@ function MisPrestamos() {
 
   function formatDate(d) {
     if (!d) return "—";
-    return new Date(d).toLocaleDateString("es-MX", { day: "2-digit", month: "short", year: "numeric" });
+    return new Date(d).toLocaleDateString("es-MX", { day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" });
   }
 
   function badgeStyle(state) {
