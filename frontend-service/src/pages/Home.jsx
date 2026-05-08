@@ -50,7 +50,7 @@ function Home() {
     setLoading(true);
     try {
       const token = getToken();
-      const data = await bffGet("/api/resources", { token, params: { search: busqueda, page, pageSize } });
+      const data = await bffGet("/api/resources", { token, params: { search: busqueda, page, pageSize, sort: "recent" } });
       if (!cancelToken.cancelled) {
         setRecursos(data.items || []);
         setTotal(data.total || 0);
@@ -195,6 +195,10 @@ function Home() {
               placeholder="Buscar recursos por título, autor o género..."
             />
           </div>
+
+          <h3 style={{ borderBottom: "2px solid #e0e0e0", paddingBottom: "10px", marginBottom: "20px", color: "#b8860b" }}>
+            Recientemente añadido
+          </h3>
 
           <div className="books-grid" style={{ margin: 0, display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))", gap: "25px", marginBottom: "30px" }}>
             {loading ? (

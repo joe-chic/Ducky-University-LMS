@@ -164,7 +164,7 @@ app.get("/users", authMiddleware, async (req, res) => {
        FROM users u
        JOIN roles r ON r.role_id = u.role_id
        ${whereSql}
-       ORDER BY u.user_id
+       ORDER BY u.first_name ASC, u.father_lastname ASC, u.user_id ASC
        LIMIT $${params.length + 1} OFFSET $${params.length + 2}`,
       [...params, pageSize, offset]
     );

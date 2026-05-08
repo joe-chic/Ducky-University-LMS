@@ -122,7 +122,19 @@ function Usuarios() {
             </div>
 
             <div className="usuarios-lista">
-              {usuarios.map((usuario) => (
+              {usuarios.reduce((acc, usuario, index) => {
+                const currentLetter = (usuario.nombre?.[0] || "#").toUpperCase();
+                const prevLetter = index > 0 ? (usuarios[index - 1].nombre?.[0] || "#").toUpperCase() : null;
+                if (!busqueda.trim() && currentLetter !== prevLetter) {
+                  acc.push(
+                    <div key={`letter-${currentLetter}`} style={{ width: "100%", margin: "20px 0 10px 0", padding: "0 10px" }}>
+                      <h2 style={{ margin: 0, color: "#b8860b", borderBottom: "2px solid #e0e0e0", paddingBottom: "5px", fontSize: "1.4rem" }}>
+                        {currentLetter}
+                      </h2>
+                    </div>
+                  );
+                }
+                acc.push(
                 <div className="usuario-card" key={usuario.id}>
                   <div className="usuario-avatar">
                     <img src={usuario.foto || userIcon} alt={usuario.nombre} className="usuario-foto" />
@@ -169,7 +181,9 @@ function Usuarios() {
                     </button>
                   </div>
                 </div>
-              ))}
+                  );
+                  return acc;
+                }, [])}
             </div>
 
             {totalPaginas > 1 && (

@@ -313,7 +313,21 @@ function Libros() {
               ) : recursos.length === 0 ? (
                 <div style={{ textAlign: "center", padding: "40px", color: "#999" }}>No se encontraron recursos.</div>
               ) : (
-                recursos.map(recurso => (
+                recursos.reduce((acc, recurso, index) => {
+                  const currentLetter = (recurso.titulo?.[0] || "#").toUpperCase();
+                  const prevLetter = index > 0 ? (recursos[index - 1].titulo?.[0] || "#").toUpperCase() : null;
+                  
+                  if (!busqueda.trim() && currentLetter !== prevLetter) {
+                    acc.push(
+                      <div key={`letter-${currentLetter}`} style={{ width: "100%", margin: "20px 0 10px 0", padding: "0 10px" }}>
+                        <h2 style={{ margin: 0, color: "#b8860b", borderBottom: "2px solid #e0e0e0", paddingBottom: "5px", fontSize: "1.4rem" }}>
+                          {currentLetter}
+                        </h2>
+                      </div>
+                    );
+                  }
+                  
+                  acc.push(
                   <div
                     className="usuario-card"
                     key={recurso.id}
@@ -369,7 +383,9 @@ function Libros() {
                       </button>
                     </div>
                   </div>
-                ))
+                  );
+                  return acc;
+                }, [])
               )}
             </div>
 

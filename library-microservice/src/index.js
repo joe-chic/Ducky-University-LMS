@@ -71,6 +71,7 @@ app.get("/resources", async (req, res) => {
     const editorial = String(req.query.editorial || "").trim();
     const anio      = req.query.anio ? Number(req.query.anio) : null;
     const tipo      = String(req.query.tipo      || "").trim();
+    const sort      = String(req.query.sort      || "").trim();
     const page      = Math.max(1, Number(req.query.page || 1));
     const pageSize  = Math.min(50, Math.max(1, Number(req.query.pageSize || 10)));
     const offset    = (page - 1) * pageSize;
@@ -178,7 +179,7 @@ app.get("/resources", async (req, res) => {
        LEFT JOIN digital_metadata dm ON dm.resource_id = r.resource_id
        ${whereSql}
        GROUP BY r.resource_id, c.first_name, c.middle_name, c.father_lastname, c.mother_lastname, c.colaborator_id, o.organization_name, o.organization_id, r.resource_state, r.resource_type, r.resource_publication_year, r.resource_cost, bm.book_isbn, bm.book_edition_number, bm.book_synopsis, dm.digital_url_link
-       ORDER BY r.resource_id DESC
+       ${sort === "recent" ? "ORDER BY r.resource_id DESC" : "ORDER BY r.resource_title ASC, r.resource_id ASC"}
        LIMIT $${params.length + 1} OFFSET $${params.length + 2}`,
       [...params, pageSize, offset]
     );
