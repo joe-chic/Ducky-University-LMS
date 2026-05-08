@@ -468,12 +468,58 @@ app.get("/api/digital-loans", async (req, res) => {
 
 app.post("/api/digital-loans", async (req, res) => {
   try {
+    const { campus_id, resource_id } = req.body;
+    if (!campus_id || !resource_id)
+      return res.status(400).json({ message: "campus_id y resource_id son requeridos." });
+
+    const token = req.headers.authorization;
+    const headers = token ? { Authorization: token } : {};
+
+    // ── Step 1: Verify user exists and is active ──
+    const userRes = await axios.get(`${USERS_BASE_URL}/users/${campus_id}/by-campus`, {
+      headers, timeout: 10_000,
+    }).catch(err => {
+      const s = err?.response?.status;
+      if (s === 404) throw new Error("El usuario no existe en el sistema.");
+      throw new Error("No se pudo verificar el usuario.");
+    });
+    const user = userRes.data;
+    if (user.user_state !== "active") {
+      return res.status(403).json({
+        message: `Tu cuenta está ${user.user_state === "blocked" ? "bloqueada" : "deshabilitada"} y no puede solicitar préstamos digitales.`
+      });
+    }
+
+    // ── Step 2: Verify no unpaid fines ──
+    const finesRes = await axios.get(`${TREASURY_BASE_URL}/fines`, {
+      params: { campus_id, status: "unpaid" }, timeout: 10_000,
+    }).catch(() => ({ data: [] }));
+    const unpaidFines = Array.isArray(finesRes.data) ? finesRes.data : [];
+    if (unpaidFines.length > 0) {
+      return res.status(403).json({
+        message: `Tienes multas pendientes. Deberás liquidarlas antes de solicitar un préstamo digital.`
+      });
+    }
+
+    // ── Step 3: Verify ≤3 active digital loans ──
+    const activeRes = await axios.get(`${LIBRARY_BASE_URL}/digital-loans`, {
+      params: { campus_id, state: "active" }, timeout: 10_000,
+    }).catch(() => ({ data: { items: [] } }));
+    const activeLoans = Array.isArray(activeRes.data?.items) ? activeRes.data.items : [];
+    if (activeLoans.length >= 3) {
+      return res.status(403).json({
+        message: `Ya tienes ${activeLoans.length} préstamo(s) digital(es) activo(s). El máximo permitido es 3. Libera accesos antes de solicitar otro.`
+      });
+    }
+
+    // ── Step 4: Create the digital loan ──
     const r = await axios.post(`${LIBRARY_BASE_URL}/digital-loans`, req.body, {
       headers: { "Content-Type": "application/json" }, timeout: 8000,
     });
     res.status(r.status).json(r.data);
   } catch (err) {
-    res.status(err?.response?.status || 500).json({ message: err?.response?.data?.message || "Error al registrar acceso digital" });
+    const bodyMsg = err?.response?.data?.message || err?.response?.data?.error || err.message;
+    res.status(err?.response?.status || err.statusCode || 500).json({ message: bodyMsg || "Error al registrar acceso digital" });
   }
 });
 
