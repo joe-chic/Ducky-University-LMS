@@ -329,6 +329,7 @@ function LibroDetalle() {
   const [dmForm,        setDmForm]        = useState({});
   const [loadingDescarga, setLoadingDescarga] = useState(false);
   const [activeLoanId,  setActiveLoanId]  = useState(null);
+  const [metaLoaded,    setMetaLoaded]    = useState(false);
 
   useEffect(() => {
     if (!libro || !isDigitalDownloadable(libro)) return;
@@ -342,6 +343,7 @@ function LibroDetalle() {
       setDigitalStatus(status);
       if (loans?.items?.length) setActiveLoanId(loans.items[0].digital_loan_id);
       if (meta) setDmForm({ ...meta });
+      setMetaLoaded(true);
     });
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [libro, id, campusId]);
@@ -414,6 +416,14 @@ function LibroDetalle() {
       setMsg({ type: "success", text: "Metadatos de publicación actualizados." });
     } catch (err) { setMsg({ type: "error", text: err.message }); }
   };
+
+  let isAvailable = libro?.disponible;
+  if (libro && isDigitalDownloadable(libro)) {
+    // If metadata is loaded and there is no URL, then it is not available.
+    if (metaLoaded && (!digitalMeta || !digitalMeta.digital_url_link)) {
+      isAvailable = false;
+    }
+  }
 
   return (
     <div className="home-container">
@@ -498,8 +508,8 @@ function LibroDetalle() {
                     )}
                     <div className="libro-dato">
                       <span className="libro-dato-label">Estado</span>
-                      <span className="libro-dato-valor" style={{ color: libro.disponible ? "#2e7d32" : "#c62828", fontWeight: "bold" }}>
-                        {libro.disponible ? "Disponible" : "No disponible"}
+                      <span className="libro-dato-valor" style={{ color: isAvailable ? "#2e7d32" : "#c62828", fontWeight: "bold" }}>
+                        {isAvailable ? "Disponible" : "No disponible"}
                       </span>
                     </div>
                   </div>
@@ -718,7 +728,11 @@ function LibroDetalle() {
                 {/* Digital: download button for students */}
                 {isAlumno && isDigitalDownloadable(libro) && (
                   <>
-                    {digitalStatus?.can_access ? (
+                    {!isAvailable ? (
+                      <p style={{ color: "#c62828", fontWeight: 600, background: "#fff3f3", border: "1px solid #ffcdd2", borderRadius: "8px", padding: "10px 14px" }}>
+                        🚫 Recurso digital no configurado. URL de descarga no disponible.
+                      </p>
+                    ) : digitalStatus?.can_access ? (
                       <button className="libro-btn-prestamo" onClick={handleDescarga} disabled={loadingDescarga}>
                         {loadingDescarga ? "Procesando…" : "📥 Descargar Recurso"}
                       </button>
