@@ -486,10 +486,10 @@ function LibroDetalle() {
                       <span className="libro-dato-label">Tipo</span>
                       <span className="libro-dato-valor" style={{ textTransform: "capitalize" }}>{libro.tipo?.replace(/_/g, " ")}</span>
                     </div>
-                    {libro.tipo !== "digital_article" && (
+                    {!isPeriodical(libro) && libro.tipo !== "digital_article" && (
                       <div className="libro-dato">
-                        <span className="libro-dato-label">{libro.tipo === "e_journal" ? "ISSN" : "ISBN"}</span>
-                        <span className="libro-dato-valor">{libro.tipo === "e_journal" ? (libro.issn || "N/A") : (libro.isbn || "N/A")}</span>
+                        <span className="libro-dato-label">ISBN</span>
+                        <span className="libro-dato-valor">{libro.isbn || "N/A"}</span>
                       </div>
                     )}
                     <div className="libro-dato">

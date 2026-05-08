@@ -151,7 +151,11 @@ app.get("/resources", async (req, res) => {
           o.organization_id AS editorial_id,
           STRING_AGG(DISTINCT cat.category_name, ', ') AS generos,
           STRING_AGG(DISTINCT cat.category_id::text, ',') AS generos_ids,
-          (r.resource_state = 'available') AS disponible,
+          (CASE 
+            WHEN r.resource_type IN ('e_book', 'digital_article') 
+                 AND (dm.digital_url_link IS NULL OR TRIM(dm.digital_url_link) = '') THEN false
+            ELSE (r.resource_state = 'available')
+          END) AS disponible,
           r.resource_type AS tipo,
           r.resource_publication_year AS ano_publicacion,
           r.resource_cost AS costo,
@@ -171,8 +175,9 @@ app.get("/resources", async (req, res) => {
        LEFT JOIN supplementary_languages sl ON sl.resource_id = r.resource_id
        LEFT JOIN languages l ON l.language_id = sl.language_id
        LEFT JOIN physical_examples pe ON pe.resource_id = r.resource_id
+       LEFT JOIN digital_metadata dm ON dm.resource_id = r.resource_id
        ${whereSql}
-       GROUP BY r.resource_id, c.first_name, c.middle_name, c.father_lastname, c.mother_lastname, c.colaborator_id, o.organization_name, o.organization_id, r.resource_state, r.resource_type, r.resource_publication_year, r.resource_cost, bm.book_isbn, bm.book_edition_number, bm.book_synopsis
+       GROUP BY r.resource_id, c.first_name, c.middle_name, c.father_lastname, c.mother_lastname, c.colaborator_id, o.organization_name, o.organization_id, r.resource_state, r.resource_type, r.resource_publication_year, r.resource_cost, bm.book_isbn, bm.book_edition_number, bm.book_synopsis, dm.digital_url_link
        ORDER BY r.resource_id DESC
        LIMIT $${params.length + 1} OFFSET $${params.length + 2}`,
       [...params, pageSize, offset]
@@ -205,7 +210,11 @@ app.get("/resources/:id", async (req, res) => {
           o.organization_id AS editorial_id,
           STRING_AGG(DISTINCT cat.category_name, ', ') AS generos,
           STRING_AGG(DISTINCT cat.category_id::text, ',') AS generos_ids,
-          (r.resource_state = 'available') AS disponible,
+          (CASE 
+            WHEN r.resource_type IN ('e_book', 'digital_article') 
+                 AND (dm.digital_url_link IS NULL OR TRIM(dm.digital_url_link) = '') THEN false
+            ELSE (r.resource_state = 'available')
+          END) AS disponible,
           r.resource_type AS tipo,
           r.resource_publication_year AS ano_publicacion,
           r.resource_cost AS costo,
@@ -234,6 +243,7 @@ app.get("/resources/:id", async (req, res) => {
        LEFT JOIN supplementary_languages sl ON sl.resource_id = r.resource_id
        LEFT JOIN languages l ON l.language_id = sl.language_id
        LEFT JOIN physical_examples pe ON pe.resource_id = r.resource_id
+       LEFT JOIN digital_metadata dm ON dm.resource_id = r.resource_id
        LEFT JOIN digital_articles da ON da.resource_child_id = r.resource_id
        LEFT JOIN resources rj ON rj.resource_id = da.resource_parent_id
        LEFT JOIN periodical_metadata pm ON pm.resource_id = da.resource_parent_id
@@ -245,7 +255,7 @@ app.get("/resources/:id", async (req, res) => {
                 bm.book_edition_number, bm.book_synopsis, da.resource_parent_id, rj.resource_title,
                 pm.periodical_issn, pm.periodical_frequency, pm.peer_reviewed,
                 da.digital_article_issue, da.digital_article_volume, da.digital_article_year,
-                pm_self.periodical_issn`,
+                pm_self.periodical_issn, dm.digital_url_link`,
       [id]
     );
 
