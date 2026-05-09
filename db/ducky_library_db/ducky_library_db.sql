@@ -27,7 +27,7 @@ CREATE TYPE collaborator_type AS ENUM(
 );
 CREATE TYPE physical_media_health_state AS ENUM('good', 'damaged', 'incomplete', 'lost');
 CREATE TYPE physical_media_op_state AS ENUM(
-  'available', 'on loan', 'reserved', 'internal consultation only', 'in transit'
+  'available', 'on loan', 'reserved', 'internal consultation only', 'in transit', 'disabled'
 );
 CREATE TYPE polarity_type AS ENUM('negative', 'positive');
 CREATE TYPE publication_frequency AS ENUM('daily', 'weekly', 'monthly', 'quarterly', 'annually');

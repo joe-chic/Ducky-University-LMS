@@ -144,12 +144,22 @@ function Home() {
 
   const handleToggleEstadoRecurso = async (recurso, e) => {
     e.stopPropagation();
-    const accion = recurso.disponible ? "deshabilitar" : "habilitar";
+    const rid = Number.parseInt(String(recurso.id), 10);
+    if (!Number.isFinite(rid) || rid < 1) {
+      alert("Identificador de recurso inválido.");
+      return;
+    }
+    const disponibleActual =
+      recurso.disponible === true ||
+      recurso.disponible === "true" ||
+      recurso.disponible === 1 ||
+      recurso.disponible === "1";
+    const accion = disponibleActual ? "deshabilitar" : "habilitar";
     if (!window.confirm(`¿Seguro que deseas ${accion} este recurso?`)) return;
     try {
       const token = getToken();
-      await bffPut(`/api/resources/${recurso.id}/toggle-state`, { disponible: !recurso.disponible }, { token });
-      setRecursos(prev => prev.map(r => r.id === recurso.id ? { ...r, disponible: !recurso.disponible } : r));
+      await bffPut(`/api/resources/${rid}/toggle-state`, { disponible: !disponibleActual }, { token });
+      setRecursos(prev => prev.map(r => r.id === recurso.id ? { ...r, disponible: !disponibleActual } : r));
     } catch (err) {
       alert(`Error al ${accion} el recurso`);
     }
@@ -504,10 +514,6 @@ function Home() {
                 ))}
               </div>
 
-              <label style={{ display: "flex", alignItems: "center", gap: "10px", marginTop: "10px", cursor: "pointer", fontWeight: "bold", background: "#f0f0f0", padding: "10px", borderRadius: "5px" }}>
-                <input type="checkbox" checked={recursoEditando?.disponible ?? true} onChange={(e) => setRecursoEditando({ ...recursoEditando, disponible: e.target.checked })} />
-                Marcar como Visible/Disponible al Público
-              </label>
 
               {recursoEditando?.id && recursoEditando?.tipo === 'book' && (
                 <div style={{ background: "#e3f2fd", padding: "10px", borderRadius: "5px", marginTop: "15px", border: "1px solid #90caf9" }}>

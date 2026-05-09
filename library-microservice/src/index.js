@@ -11,6 +11,26 @@ app.use(express.json());
 
 const PORT = process.env.PORT ? Number(process.env.PORT) : 3002;
 
+/** Solo el BFF debe enviar catalog_scope=staff (tras JWT). Cualquier otra petición = catálogo público. */
+function isPatronCatalogScope(req) {
+  return String(req.query.catalog_scope || "").trim().toLowerCase() !== "staff";
+}
+
+async function assertPatronParentResourceAvailable(req, res, resourceId) {
+  if (!isPatronCatalogScope(req)) return true;
+  const rid = Number(resourceId);
+  if (!rid) {
+    res.status(400).json({ message: "Invalid id" });
+    return false;
+  }
+  const st = await query(`SELECT resource_state FROM resources WHERE resource_id = $1`, [rid]);
+  if (!st.rows.length || st.rows[0].resource_state !== "available") {
+    res.status(404).json({ message: "Resource not found" });
+    return false;
+  }
+  return true;
+}
+
 app.get("/health", (_req, res) => {
   res.json({ ok: true });
 });
@@ -39,6 +59,14 @@ function resourceRowToDto(row) {
     codebar: row.codebar,
     portada: row.portada
   };
+}
+
+/** Body JSON can arrive as native boolean or (from some clients) strings/numbers */
+function parseDisponible(body) {
+  const v = body?.disponible;
+  if (v === true || v === "true" || v === 1 || v === "1") return true;
+  if (v === false || v === "false" || v === 0 || v === "0") return false;
+  return null;
 }
 
 function pgErrorToClientError(err) {
@@ -165,6 +193,10 @@ app.get("/resources", async (req, res) => {
     if (tipo) {
       params.push(tipo);
       where.push(`r.resource_type = $${params.length}`);
+    }
+
+    if (isPatronCatalogScope(req)) {
+      where.push(`r.resource_state = 'available'`);
     }
 
     const whereSql = where.length > 0 ? `WHERE ${where.join(" AND ")}` : "";
@@ -329,7 +361,7 @@ app.get("/resources/:id", async (req, res) => {
        LEFT JOIN audiovisual_metadata av ON av.resource_id = r.resource_id
        LEFT JOIN maps_metadata mm ON mm.resource_id = r.resource_id
        LEFT JOIN resource_labels rl ON rl.resource_id = r.resource_id AND rl.resource_is_primary = true
-       WHERE r.resource_id = $1
+       WHERE r.resource_id = $1${isPatronCatalogScope(req) ? " AND r.resource_state = 'available'" : ""}
        GROUP BY r.resource_id, c.first_name, c.middle_name, c.father_lastname, c.mother_lastname,
                 c.colaborator_id, o.organization_name, o.organization_id, r.resource_state,
                 r.resource_type, r.resource_publication_year, r.resource_cost, bm.book_isbn,
@@ -381,7 +413,7 @@ app.post("/resources", async (req, res) => {
   try {
     await client.query('BEGIN');
     const {
-      titulo, tipo, disponible, ano_publicacion, costo,
+      titulo, tipo, ano_publicacion, costo,
       autor_id, nuevo_autor, nuevo_autor_nombre, nuevo_autor_apellido, editorial_id, nueva_editorial,
       generos_ids, lenguajes_ids, lenguaje_principal_id,
       isbn, edicion, sinopsis,
@@ -399,10 +431,10 @@ app.post("/resources", async (req, res) => {
       }
       if (normalizedIssn === "") normalizedIssn = null;
     }
-    
+
     await client.query(`SELECT setval('resources_resource_id_seq', COALESCE((SELECT MAX(resource_id) FROM resources), 1))`);
-    
-    const state = disponible ? 'available' : 'disabled';
+    const availParsed = parseDisponible(req.body || {});
+    const state = availParsed === false ? "disabled" : "available";
     
     let final_autor_id = autor_id || null;
     const nombreAutor = String(nuevo_autor_nombre || "").trim();
@@ -495,7 +527,7 @@ app.put("/resources/:id", async (req, res) => {
     const id = Number(req.params.id);
     if (!id) return res.status(400).json({ message: "Invalid id" });
     const {
-      titulo, tipo, disponible, ano_publicacion, costo,
+      titulo, tipo, ano_publicacion, costo,
       autor_id, nuevo_autor, nuevo_autor_nombre, nuevo_autor_apellido, editorial_id, nueva_editorial,
       generos_ids, lenguajes_ids, lenguaje_principal_id,
       isbn, edicion, sinopsis,
@@ -513,9 +545,20 @@ app.put("/resources/:id", async (req, res) => {
       }
       if (normalizedIssn === "") normalizedIssn = null;
     }
-    
-    const state = disponible ? 'available' : 'disabled';
-    
+
+    const availParsed = parseDisponible(req.body || {});
+    let state;
+    if (availParsed === true) state = "available";
+    else if (availParsed === false) state = "disabled";
+    else {
+      const cur = await client.query(`SELECT resource_state::text AS resource_state FROM resources WHERE resource_id = $1`, [id]);
+      if (!cur.rows.length) {
+        await client.query("ROLLBACK");
+        return res.status(404).json({ message: "Resource not found" });
+      }
+      state = cur.rows[0].resource_state;
+    }
+
     let final_autor_id = autor_id || null;
     const nombreAutor = String(nuevo_autor_nombre || "").trim();
     const apellidoAutor = String(nuevo_autor_apellido || "").trim();
@@ -618,34 +661,84 @@ app.put("/resources/:id", async (req, res) => {
 
 // PUT /resources/:id/toggle-state
 app.put("/resources/:id/toggle-state", async (req, res) => {
+  const client = await pool.connect();
   try {
-    const id = Number(req.params.id);
-    const { disponible } = req.body;
-    if (!id) return res.status(400).json({ message: "Invalid id" });
-    const state = disponible ? 'available' : 'disabled';
-    
-    await query(
-      `UPDATE resources
-       SET resource_state = $1, disabled_at = CASE WHEN $1 = 'disabled' THEN NOW() ELSE NULL END, latest_modified_at = NOW()
-       WHERE resource_id = $2`,
-      [state, id]
-    );
-
-    // Cascade disable to digital article children if disabling
-    if (state === 'disabled') {
-       await query(
-          `UPDATE resources SET resource_state = 'disabled', disabled_at = NOW(), latest_modified_at = NOW() 
-           WHERE resource_id IN (
-              SELECT resource_child_id FROM digital_articles WHERE resource_parent_id = $1
-           )`,
-          [id]
-       );
+    await client.query("BEGIN");
+    const rid = Number.parseInt(req.params.id, 10);
+    const avail = parseDisponible(req.body || {});
+    if (!Number.isFinite(rid) || rid < 1) {
+      await client.query("ROLLBACK");
+      return res.status(400).json({ message: "Invalid id" });
     }
-    
+    if (avail === null) {
+      await client.query("ROLLBACK");
+      return res.status(400).json({
+        message: 'Se requiere "disponible" como boolean en el JSON (ej. {"disponible": false}).',
+      });
+    }
+    const mediaState = avail ? "available" : "disabled";
+
+    // Do not bind the same $1 to both media_state and a text comparison — Postgres reports
+    // "inconsistent types deduced for parameter $1". Use literals + explicit enum cast.
+    if (mediaState === "disabled") {
+      await client.query(
+        `UPDATE resources
+         SET resource_state = 'disabled'::media_state,
+             disabled_at = NOW(),
+             latest_modified_at = NOW()
+         WHERE resource_id = $1`,
+        [rid]
+      );
+    } else {
+      await client.query(
+        `UPDATE resources
+         SET resource_state = 'available'::media_state,
+             disabled_at = NULL,
+             latest_modified_at = NOW()
+         WHERE resource_id = $1`,
+        [rid]
+      );
+    }
+
+    if (mediaState === "disabled") {
+      await client.query(
+        `UPDATE resources SET resource_state = 'disabled', disabled_at = NOW(), latest_modified_at = NOW()
+         WHERE resource_id IN (
+           SELECT resource_child_id FROM digital_articles WHERE resource_parent_id = $1
+         )`,
+        [rid]
+      );
+      // Retirar circulación de ejemplares que no están prestados actualmente (los prestados siguen hasta devolución)
+      await client.query(
+        `UPDATE physical_examples
+         SET example_op_state = 'disabled', latest_modified_at = NOW()
+         WHERE resource_id = $1 AND example_op_state <> 'on loan'`,
+        [rid]
+      );
+    } else {
+      // Rehabilitar solo copias marcadas inhabilitadas junto con la obra; no toca consulta interna, reserva, etc.
+      await client.query(
+        `UPDATE physical_examples SET example_op_state = 'available', latest_modified_at = NOW()
+         WHERE resource_id = $1 AND example_op_state = 'disabled'`,
+        [rid]
+      );
+    }
+
+    await client.query("COMMIT");
     res.json({ ok: true });
   } catch (err) {
+    try {
+      await client.query("ROLLBACK");
+    } catch (_) { /* noop */ }
     console.error(err);
-    res.status(500).json({ message: "Failed to toggle state" });
+    const mapped = pgErrorToClientError(err);
+    if (mapped) return res.status(mapped.status).json({ message: mapped.message });
+    return res.status(500).json({
+      message: err?.message || "Failed to toggle state",
+      ...(err?.code ? { code: String(err.code) } : {}),
+    });
+  } finally {
+    client.release();
   }
 });
 
@@ -671,6 +764,11 @@ app.delete("/resources/:id", async (req, res) => {
        )`,
       [id]
     );
+    await query(
+      `UPDATE physical_examples SET example_op_state = 'disabled', latest_modified_at = NOW()
+       WHERE resource_id = $1 AND example_op_state <> 'on loan'`,
+      [id]
+    );
     res.json({ ok: true });
   } catch (err) {
     if (err.code === "23505") {
@@ -687,6 +785,7 @@ app.delete("/resources/:id", async (req, res) => {
 // -------------------------------------------------------------
 app.get("/resources/:id/examples", async (req, res) => {
   try {
+    if (!(await assertPatronParentResourceAvailable(req, res, req.params.id))) return;
     const id = Number(req.params.id);
     const result = await query(
       `SELECT barcode, example_location_code, example_health_state, example_op_state
@@ -946,16 +1045,21 @@ app.put("/loans/:id/return", async (req, res) => {
     const { return_condition, damage_type, severity_level, librarian_notes } = req.body || {};
     const loan = await client.query(
       `SELECT pl.barcode, pl.loan_state, pl.initial_lent_at, pl.campus_id, pl.returned_at,
-              r.resource_title AS titulo
+              r.resource_title AS titulo, r.resource_state
        FROM physical_loans pl
        JOIN physical_examples pe ON pe.barcode = pl.barcode
        JOIN resources r ON r.resource_id = pe.resource_id
        WHERE pl.loan_id = $1`,
       [loan_id]
     );
-    if (!loan.rows.length) return res.status(404).json({ message: "Préstamo no encontrado" });
-    if (loan.rows[0].loan_state === "completed" || loan.rows[0].returned_at)
+    if (!loan.rows.length) {
+      await client.query("ROLLBACK");
+      return res.status(404).json({ message: "Préstamo no encontrado" });
+    }
+    if (loan.rows[0].loan_state === "completed" || loan.rows[0].returned_at) {
+      await client.query("ROLLBACK");
       return res.status(409).json({ message: "El préstamo ya fue completado o devuelto" });
+    }
 
     const returnedAt = new Date();
     const loanedAt = new Date(loan.rows[0].initial_lent_at);
@@ -971,10 +1075,13 @@ app.put("/loans/:id/return", async (req, res) => {
       ["completed", returnedAt, loan_id]
     );
 
+    const resourceAllowsCirculation = loan.rows[0].resource_state === "available";
+    const nextOpAfterReturn = resourceAllowsCirculation ? "available" : "disabled";
+
     if (return_condition === "damaged") {
       await client.query(
         `UPDATE physical_examples
-         SET example_health_state = 'damaged', example_op_state = 'available', latest_modified_at = NOW()
+         SET example_health_state = 'damaged', latest_modified_at = NOW()
          WHERE barcode = $1`,
         [loan.rows[0].barcode]
       );
@@ -999,8 +1106,9 @@ app.put("/loans/:id/return", async (req, res) => {
     }
 
     await client.query(
-      `UPDATE physical_examples SET example_op_state = 'available', latest_modified_at = NOW() WHERE barcode = $1`,
-      [loan.rows[0].barcode]
+      `UPDATE physical_examples SET example_op_state = $1::physical_media_op_state, latest_modified_at = NOW()
+       WHERE barcode = $2`,
+      [nextOpAfterReturn, loan.rows[0].barcode]
     );
 
     await client.query("COMMIT");
@@ -1102,7 +1210,10 @@ app.put("/examples/:barcode/damage-details", async (req, res) => {
         [health_state, barcode]
       );
     }
-    if (health_state === "lost") {
+    if (health_state === "good") {
+      await client.query(`DELETE FROM damaged_resource_details WHERE barcode=$1`, [barcode]);
+      await client.query(`DELETE FROM lost_resource_details WHERE barcode=$1`, [barcode]);
+    } else if (health_state === "lost") {
       await client.query(
         `INSERT INTO lost_resource_details(barcode, librarian_notes)
          VALUES($1,$2)
@@ -1111,19 +1222,16 @@ app.put("/examples/:barcode/damage-details", async (req, res) => {
       );
       await client.query(`DELETE FROM damaged_resource_details WHERE barcode=$1`, [barcode]);
     } else {
-      if (damage_type && severity_level) {
+      // It is "damaged" or "incomplete"
+      if (damage_type || severity_level || librarian_notes) {
         await client.query(
           `INSERT INTO damaged_resource_details(barcode, damage_type, severity_level, librarian_notes)
-           VALUES($1,$2,$3,$4)
-           ON CONFLICT(barcode) DO UPDATE SET damage_type=$2, severity_level=$3, librarian_notes=$4`,
-          [barcode, damage_type, severity_level, librarian_notes || ""]
-        );
-      } else if (librarian_notes !== undefined) {
-        await client.query(
-          `INSERT INTO damaged_resource_details(barcode, damage_type, severity_level, librarian_notes)
-           VALUES($1, '', 'low', $2)
-           ON CONFLICT(barcode) DO UPDATE SET librarian_notes=$2`,
-          [barcode, librarian_notes]
+           VALUES($1, CAST(COALESCE(NULLIF($2::text, ''), 'damaged cover') AS damage_type), CAST(COALESCE(NULLIF($3::text, ''), 'low') AS severity_level), COALESCE($4, ''))
+           ON CONFLICT(barcode) DO UPDATE SET 
+             damage_type = CAST(COALESCE(NULLIF($2::text, ''), damaged_resource_details.damage_type::text, 'damaged cover') AS damage_type), 
+             severity_level = CAST(COALESCE(NULLIF($3::text, ''), damaged_resource_details.severity_level::text, 'low') AS severity_level), 
+             librarian_notes = COALESCE($4, '')`,
+          [barcode, damage_type, severity_level, librarian_notes]
         );
       }
       await client.query(`DELETE FROM lost_resource_details WHERE barcode=$1`, [barcode]);
@@ -1148,6 +1256,7 @@ app.put("/examples/:barcode/damage-details", async (req, res) => {
 // ─────────────────────────────────────────────────────────────────────────────
 app.get("/resources/:id/articles", async (req, res) => {
   try {
+    if (!(await assertPatronParentResourceAvailable(req, res, req.params.id))) return;
     const id = Number(req.params.id);
     const r = await query(
       `SELECT r.resource_id, r.resource_title, r.resource_state,
@@ -1160,7 +1269,11 @@ app.get("/resources/:id/articles", async (req, res) => {
        ORDER BY da.digital_article_year DESC, da.digital_article_volume DESC, da.digital_article_issue DESC, r.resource_title ASC`,
        [id]
     );
-    res.json(r.rows);
+    let rows = r.rows;
+    if (isPatronCatalogScope(req)) {
+      rows = rows.filter((row) => row.resource_state === "available");
+    }
+    res.json(rows);
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: err.message });
@@ -1172,6 +1285,7 @@ app.get("/resources/:id/articles", async (req, res) => {
 // ─────────────────────────────────────────────────────────────────────────────
 app.get("/resources/:id/periodical-metadata", async (req, res) => {
   try {
+    if (!(await assertPatronParentResourceAvailable(req, res, req.params.id))) return;
     const id = Number(req.params.id);
     const r = await query(
       `SELECT pm.*, r.resource_title 
@@ -1231,11 +1345,12 @@ app.put("/resources/:id/periodical-metadata", async (req, res) => {
 // ─────────────────────────────────────────────────────────────────────────────
 // DIGITAL RESOURCES
 // ─────────────────────────────────────────────────────────────────────────────
-const DIGITAL_MAX_RENEWALS = 3;
+const DIGITAL_MAX_RENEWALS = 2;
 
 // GET /resources/:id/digital-metadata
 app.get("/resources/:id/digital-metadata", async (req, res) => {
   try {
+    if (!(await assertPatronParentResourceAvailable(req, res, req.params.id))) return;
     const id = Number(req.params.id);
     const r = await query(
       `SELECT dm.*, r.resource_type, r.resource_title
@@ -1299,6 +1414,7 @@ async function autoExpireDigitalLoans(resourceId) {
 // GET /resources/:id/digital-status — concurrent slot availability
 app.get("/resources/:id/digital-status", async (req, res) => {
   try {
+    if (!(await assertPatronParentResourceAvailable(req, res, req.params.id))) return;
     const id = Number(req.params.id);
     await autoExpireDigitalLoans(id);
     const metaRes = await query(
@@ -1333,12 +1449,14 @@ app.get("/digital-loans", async (req, res) => {
     if (resource_id) { params.push(Number(resource_id)); where.push(`dl.resource_id = $${params.length}`); }
     if (state)       { params.push(state);               where.push(`dl.digital_loan_state = $${params.length}`); }
     const whereSql = where.length ? `WHERE ${where.join(" AND ")}` : "";
+    const intervalExpr = `INTERVAL '${DIGITAL_ACCESS_DAYS} days'`;
     const r = await query(
       `SELECT dl.digital_loan_id, dl.resource_id, dl.campus_id, dl.initial_lent_at,
               dl.digital_loan_state, dl.returned_at,
               r.resource_title AS titulo, r.resource_type AS tipo,
               o.organization_name AS editorial,
               (SELECT COUNT(*) FROM digital_loan_renewals dlr WHERE dlr.digital_loan_id = dl.digital_loan_id)::int AS renewal_count,
+              (COALESCE((SELECT MAX(renewal_lent_at) FROM digital_loan_renewals dlr WHERE dlr.digital_loan_id = dl.digital_loan_id), dl.initial_lent_at) + ${intervalExpr}) AS due_date,
               da.resource_parent_id AS journal_id,
               rj.resource_title     AS journal_title,
               pm.periodical_issn    AS journal_issn

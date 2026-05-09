@@ -1,5 +1,5 @@
 import { useSidebar } from "../hooks/useSidebar";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useLocation, useParams } from "react-router-dom";
 import "./Home.css";
 import "./LibroDetalle.css";
@@ -10,7 +10,15 @@ import { bffGet, bffPut, bffPost, getToken } from "../api/bff";
 // ── EjemplarRow ───────────────────────────────────────────────────────────────
 // Renders one physical example row. Management users get an expandable panel
 // with full damage/lost detail and an inline editor.
-const WITHDRAWN_OP_STATE = "internal consultation only";
+/** Opciones de circulación (admin/bibliotecario). Debe coincidir con enum physical_media_op_state */
+/** Estados que el personal puede asignar manualmente ("on loan" lo pone el sistema al prestar). */
+const PHYSICAL_OP_SELECT_OPTIONS = [
+  { value: "available", label: "Circulación normal" },
+  { value: "internal consultation only", label: "Solo consulta interna" },
+  { value: "disabled", label: "Sin circulación (deshabilitado)" },
+  { value: "reserved", label: "Reservado" },
+  { value: "in transit", label: "En tránsito" },
+];
 
 function EjemplarRow({ ej, badgeColor, badgeLabel, healthColor, hasManagementRole, token, resourceId, onExampleUpdated }) {
   const [open,        setOpen]        = useState(false);
@@ -34,9 +42,11 @@ function EjemplarRow({ ej, badgeColor, badgeLabel, healthColor, hasManagementRol
     if (open) { setOpen(false); return; }
     setOpen(true);
     if (detail) return;
+    setRowMsg(null);
     setLoading(true);
     try {
-      const d = await bffGet(`/api/examples/${ej.barcode}/damage-details`, { token });
+      const bc = encodeURIComponent(String(ej.barcode || "").trim());
+      const d = await bffGet(`/api/examples/${bc}/damage-details`, { token });
       setDetail(d);
       setForm({
         health_state:    d.example_health_state,
@@ -44,33 +54,35 @@ function EjemplarRow({ ej, badgeColor, badgeLabel, healthColor, hasManagementRol
         severity_level:  d.severity_level  || "",
         librarian_notes: (d.example_health_state === "lost" ? d.lost_notes : d.damage_notes) || "",
       });
-    } catch { setRowMsg("Error al cargar detalles."); }
-    finally   { setLoading(false); }
+      setRowMsg(null);
+    } catch {
+      setRowMsg("Error al cargar detalles.");
+    } finally {
+      setLoading(false);
+    }
   }
 
   async function handleSave(e) {
     e.preventDefault();
     setSaving(true); setRowMsg(null);
     try {
-      const updated = await bffPut(`/api/examples/${ej.barcode}/damage-details`, form, { token });
+      const bc = encodeURIComponent(String(ej.barcode || "").trim());
+      const updated = await bffPut(`/api/examples/${bc}/damage-details`, form, { token });
       setDetail(updated);
       setEditMode(false);
+      await onExampleUpdated?.();
       setRowMsg("✓ Guardado correctamente.");
     } catch (err) { setRowMsg(err.message || "Error al guardar."); }
     finally      { setSaving(false); }
   }
 
-  async function toggleEjemplarCirculacion() {
-    if (!resourceId || !ej.barcode) return;
-    const op = ej.example_op_state;
-    const isWithdrawn = op === WITHDRAWN_OP_STATE;
-    if (!isWithdrawn && op === "on loan") {
-      setRowMsg("No se puede retirar de circulación un ejemplar que está en préstamo.");
+  async function persistCirculation(nextOp) {
+    const currentOp = ej.example_op_state || "available";
+    if (!resourceId || !ej.barcode || nextOp === currentOp) return;
+    if (ej.example_op_state === "on loan") {
+      setRowMsg("No puede cambiar la circulación mientras el préstamo esté activo.");
       return;
     }
-    const nextOp = isWithdrawn ? "available" : WITHDRAWN_OP_STATE;
-    const accion = isWithdrawn ? "volver a dejar en circulación" : "retirar de circulación (solo consulta interna)";
-    if (!window.confirm(`¿Seguro que deseas ${accion} este ejemplar (${ej.barcode})?`)) return;
     setCircPending(true);
     setRowMsg(null);
     try {
@@ -83,8 +95,8 @@ function EjemplarRow({ ej, badgeColor, badgeLabel, healthColor, hasManagementRol
         },
         { token }
       );
-      onExampleUpdated?.();
-      setRowMsg("✓ Ejemplar actualizado.");
+      await onExampleUpdated?.();
+      setRowMsg("✓ Estado de circulación actualizado.");
     } catch (err) {
       setRowMsg(err.message || "Error al actualizar el ejemplar.");
     } finally {
@@ -94,6 +106,7 @@ function EjemplarRow({ ej, badgeColor, badgeLabel, healthColor, hasManagementRol
 
   const cellStyle  = { padding: "8px 12px", color: "#555" };
   const monoStyle  = { padding: "8px 12px", fontFamily: "monospace", fontSize: "0.85rem", color: "#333" };
+  const circulationValue = ej.example_op_state || "available";
 
   return (
     <>
@@ -111,26 +124,33 @@ function EjemplarRow({ ej, badgeColor, badgeLabel, healthColor, hasManagementRol
           </span>
         </td>
         {hasManagementRole && (
-          <td style={cellStyle}>
-            {ej.example_op_state === "on loan" ? (
-              <span style={{ fontSize: "0.78rem", color: "#888" }}>En préstamo</span>
-            ) : (
-              <button
-                type="button"
-                onClick={toggleEjemplarCirculacion}
-                disabled={circPending}
-                style={{
-                  padding: "4px 10px",
-                  fontSize: "0.78rem",
-                  border: "1px solid #bbb",
-                  borderRadius: "5px",
-                  cursor: circPending ? "wait" : "pointer",
-                  background: ej.example_op_state === WITHDRAWN_OP_STATE ? "#e8f5e9" : "#fff3e0",
-                  fontWeight: 600,
-                }}
-              >
-                {circPending ? "…" : ej.example_op_state === WITHDRAWN_OP_STATE ? "Restaurar circulación" : "Retirar circulación"}
-              </button>
+          <td style={{ ...cellStyle, minWidth: 200 }}>
+            <select
+              aria-label={`Circulación del ejemplar ${ej.barcode}`}
+              value={circulationValue}
+              disabled={circPending || ej.example_op_state === "on loan"}
+              onChange={(e) => persistCirculation(e.target.value)}
+              style={{
+                maxWidth: "100%",
+                fontSize: "0.78rem",
+                padding: "5px 8px",
+                borderRadius: 6,
+                border: "1px solid #ccc",
+                cursor: ej.example_op_state === "on loan" ? "not-allowed" : "pointer",
+                background: "#fff",
+              }}
+            >
+              {!PHYSICAL_OP_SELECT_OPTIONS.some((o) => o.value === circulationValue) && (
+                <option value={circulationValue}>
+                  {circulationValue === "on loan" ? "En préstamo (sistema)" : circulationValue}
+                </option>
+              )}
+              {PHYSICAL_OP_SELECT_OPTIONS.map(({ value: v, label }) => (
+                <option key={v} value={v}>{label}</option>
+              ))}
+            </select>
+            {circPending && (
+              <span style={{ marginLeft: 6, fontSize: "0.72rem", color: "#777" }}>Guardando…</span>
             )}
           </td>
         )}
@@ -160,16 +180,25 @@ function EjemplarRow({ ej, badgeColor, badgeLabel, healthColor, hasManagementRol
                     ["Estado físico",   detail.example_health_state  || "—"],
                     ["Tipo de daño",    detail.damage_type            || "—"],
                     ["Severidad",       detail.severity_level         || "—"],
-                    ["Notas de daño",   detail.damage_notes           || "—"],
-                    ["Notas de pérd.",  detail.lost_notes             || "—"],
+                    ["Notas (daño / bibliotecario)", detail.damage_notes || "—"],
+                    ["Notas (pérdida)",             detail.lost_notes     || "—"],
                     ["Prestado a",      detail.borrower_id            ? `campus_id: ${detail.borrower_id}` : "—"],
                     ["Renovaciones",    detail.renewal_count != null  ? `${detail.renewal_count}` : "—"],
-                  ].map(([label, val]) => (
-                    <div key={label} style={{ background: "#f0f4ff", borderRadius: "7px", padding: "7px 12px", minWidth: "110px", border: "1px solid #dde3f5" }}>
-                      <div style={{ fontSize: "0.68rem", color: "#888" }}>{label}</div>
-                      <div style={{ fontWeight: 600, fontSize: "0.83rem", textTransform: "capitalize" }}>{val}</div>
-                    </div>
-                  ))}
+                  ].map(([label, val]) => {
+                    const isNote = label.includes("Notas");
+                    return (
+                      <div key={label} style={{ background: "#f0f4ff", borderRadius: "7px", padding: "7px 12px", minWidth: "110px", border: "1px solid #dde3f5" }}>
+                        <div style={{ fontSize: "0.68rem", color: "#888" }}>{label}</div>
+                        <div style={{
+                          fontWeight: 600,
+                          fontSize: "0.83rem",
+                          textTransform: isNote ? "none" : "capitalize",
+                          whiteSpace: isNote ? "pre-wrap" : "normal",
+                          wordBreak: isNote ? "break-word" : "normal",
+                        }}>{val}</div>
+                      </div>
+                    );
+                  })}
                 </div>
 
                 {/* Edit toggle */}
@@ -257,10 +286,21 @@ function LibroDetalle() {
   const [modalEditarAbierto, setModalEditarAbierto] = useState(false);
   const [recursoEditando, setRecursoEditando] = useState(null);
   const [metadata, setMetadata] = useState({ authors: [], publishers: [], categories: [], languages: [] });
+  const [coverLoadOk, setCoverLoadOk] = useState(true);
+
+  /** Estudiantes/empleados no ven ejemplares marcados como inhabilitados (retirados de catálogo). */
+  const ejemplaresCatalogo = useMemo(() => {
+    if (hasManagementRole) return ejemplares;
+    return ejemplares.filter((e) => e.example_op_state !== "disabled");
+  }, [ejemplares, hasManagementRole]);
 
   useEffect(() => {
     if (!getToken()) navigate("/");
   }, [navigate]);
+
+  useEffect(() => {
+    setCoverLoadOk(true);
+  }, [libro?.id, libro?.portada]);
 
   useEffect(() => {
     async function loadMetadata() {
@@ -298,6 +338,17 @@ function LibroDetalle() {
     }
   };
 
+  const refreshEjemplares = async () => {
+    if (!id) return;
+    try {
+      const token = getToken();
+      const ejemplaresData = await bffGet(`/api/resources/${id}/examples`, { token });
+      setEjemplares(Array.isArray(ejemplaresData) ? ejemplaresData : []);
+    } catch {
+      /* keep list as-is */
+    }
+  };
+
   const handleGuardarRecurso = async () => {
     if (!recursoEditando?.titulo || !recursoEditando?.tipo) {
       alert("Por favor indique el Título y Tipo del recurso.");
@@ -331,7 +382,7 @@ function LibroDetalle() {
       setMsg({ type: "error", text: "No se encontró tu ID de campus. Vuelve a iniciar sesión." });
       return;
     }
-    const available = ejemplares.find(e => e.example_op_state === "available");
+    const available = ejemplaresCatalogo.find(e => e.example_op_state === "available");
     if (!available) {
       setMsg({ type: "error", text: "No hay ejemplares disponibles en este momento." });
       return;
@@ -360,20 +411,28 @@ function LibroDetalle() {
 
   const handleToggleEstado = async () => {
     if (!libro) return;
-    const accion = libro.disponible ? "deshabilitar" : "habilitar";
+    const rid = Number.parseInt(String(id), 10);
+    if (!Number.isFinite(rid) || rid < 1) {
+      setMsg({ type: "error", text: "Identificador de recurso inválido." });
+      return;
+    }
+    const disponibleActual =
+      libro.disponible === true || libro.disponible === "true" || libro.disponible === 1 || libro.disponible === "1";
+    const accion = disponibleActual ? "deshabilitar" : "habilitar";
     if (!window.confirm(`¿Seguro que deseas ${accion} este libro?`)) return;
     try {
       const token = getToken();
-      await bffPut(`/api/resources/${id}/toggle-state`, { disponible: !libro.disponible }, { token });
-      setLibro(prev => ({ ...prev, disponible: !prev.disponible }));
-      setMsg({ type: "success", text: `Libro ${accion === "deshabilitar" ? "deshabilitado" : "habilitado"} correctamente.` });
+      await bffPut(`/api/resources/${rid}/toggle-state`, { disponible: !disponibleActual }, { token });
+      setLibro((prev) => (prev ? { ...prev, disponible: !disponibleActual } : prev));
+      setMsg({
+        type: "success",
+        text: `Libro ${accion === "deshabilitar" ? "deshabilitado" : "habilitado"} correctamente.`,
+      });
+      await refreshEjemplares();
     } catch (err) {
       setMsg({ type: "error", text: err.message || "Error al cambiar el estado del libro." });
     }
   };
-
-  const disponibles = ejemplares.filter(e => e.example_op_state === "available").length;
-  const enPrestamo  = ejemplares.filter(e => e.example_op_state === "on loan").length;
 
   // Only specific digital resources can be downloaded and have digital metadata.
   const isDigitalDownloadable = libro => ["e_book", "digital_article"].includes(libro?.tipo);
@@ -538,8 +597,13 @@ function LibroDetalle() {
 
               <div className="libro-detalle-top">
                 <div className="libro-portada">
-                  {libro.portada ? (
-                    <img src={libro.portada} alt="portada" style={{ width: "100%", height: "100%", objectFit: "cover", borderRadius: "8px" }} />
+                  {libro.portada && coverLoadOk ? (
+                    <img
+                      src={libro.portada}
+                      alt="portada"
+                      onError={() => setCoverLoadOk(false)}
+                      style={{ width: "100%", height: "100%", objectFit: "cover", borderRadius: "8px" }}
+                    />
                   ) : (
                     <div className="libro-portada-placeholder">
                       <span>{libro.tipo?.replace(/_/g, " ")}</span>
@@ -610,8 +674,12 @@ function LibroDetalle() {
               {!isDigital(libro) && (
                 <div className="libro-ubicacion">
                   <h3>Ejemplares Físicos</h3>
-                  {ejemplares.length === 0 ? (
-                    <p style={{ color: "#999" }}>No hay ejemplares físicos registrados para este recurso.</p>
+                  {ejemplaresCatalogo.length === 0 ? (
+                    <p style={{ color: "#999" }}>
+                      {!hasManagementRole && ejemplares.some((e) => e.example_op_state === "disabled")
+                        ? "No hay ejemplares en catálogo para préstamo o consulta pública en este momento."
+                        : "No hay ejemplares físicos registrados para este recurso."}
+                    </p>
                   ) : (
                     <div style={{ overflowX: "auto" }}>
                       <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "0.87rem" }}>
@@ -626,15 +694,22 @@ function LibroDetalle() {
                           </tr>
                         </thead>
                         <tbody>
-                          {ejemplares.map((ej, i) => {
+                          {ejemplaresCatalogo.map((ej, i) => {
                             const opState = ej.example_op_state;
                             const badgeColor =
                               opState === "available" ? "#2E8B57"
                               : opState === "on loan" ? "#b71c1c"
                               : opState === "reserved" ? "#1565c0"
                               : opState === "internal consultation only" ? "#6a1b9a"
+                              : opState === "disabled" ? "#424242"
                               : "#795548";
-                            const badgeLabel = opState === "available" ? "Disponible" : opState === "on loan" ? "En Préstamo" : opState === "reserved" ? "Reservado" : opState === "internal consultation only" ? "Consulta Interna" : "En Tránsito";
+                            const badgeLabel =
+                              opState === "available" ? "Disponible"
+                              : opState === "on loan" ? "En Préstamo"
+                              : opState === "reserved" ? "Reservado"
+                              : opState === "internal consultation only" ? "Consulta Interna"
+                              : opState === "disabled" ? "Sin circulación"
+                              : "En Tránsito";
                             const healthColor = ej.example_health_state === "good" ? "#2e7d32" : ej.example_health_state === "damaged" ? "#e65100" : ej.example_health_state === "lost" ? "#b71c1c" : "#666";
                             return (
                               <EjemplarRow
@@ -646,7 +721,7 @@ function LibroDetalle() {
                                 hasManagementRole={hasManagementRole}
                                 token={getToken()}
                                 resourceId={id}
-                                onExampleUpdated={fetchLibro}
+                                onExampleUpdated={refreshEjemplares}
                               />
                             );
                           })}
@@ -1041,10 +1116,6 @@ function LibroDetalle() {
                   ))}
                 </div>
 
-                <label style={{ display: "flex", alignItems: "center", gap: "10px", marginTop: "10px", cursor: "pointer", fontWeight: "bold", background: "#f0f0f0", padding: "10px", borderRadius: "5px" }}>
-                  <input type="checkbox" checked={recursoEditando.disponible ?? true} onChange={e => setRecursoEditando({ ...recursoEditando, disponible: e.target.checked })} />
-                  Marcar como Visible/Disponible al Público
-                </label>
 
               </div>
               <div className="modal-botones" style={{ marginTop: "20px" }}>

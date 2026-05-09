@@ -180,8 +180,10 @@ function Libros() {
     let targetBarcode = null;
     try {
       const token = getToken();
-      const examples = await bffGet(`/api/resources/${recurso.id}/examples`, { token });
-      const available = (examples || []).find(ex => ex.example_op_state === "available");
+      const raw = await bffGet(`/api/resources/${recurso.id}/examples`, { token });
+      const list = Array.isArray(raw) ? raw : [];
+      const examples = hasManagementRole ? list : list.filter((ex) => ex.example_op_state !== "disabled");
+      const available = examples.find((ex) => ex.example_op_state === "available");
       if (!available) {
         setMsgPrestamo({ type: "error", text: "No hay ejemplares disponibles en este momento." });
         return;
@@ -209,12 +211,22 @@ function Libros() {
 
   const handleToggleEstado = async (recurso, e) => {
     e.stopPropagation();
-    const accion = recurso.disponible ? "deshabilitar" : "habilitar";
+    const rid = Number.parseInt(String(recurso.id), 10);
+    if (!Number.isFinite(rid) || rid < 1) {
+      alert("Identificador de recurso inválido.");
+      return;
+    }
+    const disponibleActual =
+      recurso.disponible === true ||
+      recurso.disponible === "true" ||
+      recurso.disponible === 1 ||
+      recurso.disponible === "1";
+    const accion = disponibleActual ? "deshabilitar" : "habilitar";
     if (!window.confirm(`¿Seguro que deseas ${accion} este recurso?`)) return;
     try {
       const token = getToken();
-      await bffPut(`/api/resources/${recurso.id}/toggle-state`, { disponible: !recurso.disponible }, { token });
-      setRecursos(prev => prev.map(r => r.id === recurso.id ? { ...r, disponible: !recurso.disponible } : r));
+      await bffPut(`/api/resources/${rid}/toggle-state`, { disponible: !disponibleActual }, { token });
+      setRecursos(prev => prev.map(r => r.id === recurso.id ? { ...r, disponible: !disponibleActual } : r));
     } catch {
       alert(`Error al ${accion} el recurso`);
     }
@@ -787,10 +799,6 @@ function Libros() {
                     <label key={l.id}><input type="checkbox" checked={(recursoEditando?.lenguajes_ids || []).includes(l.id)} onChange={e => toggleLenguaje(l.id, e.target.checked)} /> {l.name}</label>
                   ))}
                 </div>
-                <label style={{ display: "flex", alignItems: "center", gap: "10px", marginTop: "10px", cursor: "pointer", fontWeight: "bold", background: "#f0f0f0", padding: "10px", borderRadius: "5px" }}>
-                  <input type="checkbox" checked={recursoEditando?.disponible ?? true} onChange={e => setRecursoEditando({ ...recursoEditando, disponible: e.target.checked })} />
-                  Marcar como Visible/Disponible al Público
-                </label>
               </div>
               <div className="modal-botones" style={{ marginTop: "20px" }}>
                 <button className="modal-cancelar" onClick={() => { setModalRecursoAbierto(false); setFormErrors({}); }}>Cancelar</button>

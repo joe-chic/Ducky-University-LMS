@@ -514,7 +514,7 @@ function Prestamos() {
                             )}
                             {l.barcode && <code style={{ fontSize: "0.75rem", color: "#666" }}>{l.barcode}</code>}
                             {l.loan_type === "digital" && l.renewal_count != null && (
-                              <div style={{ fontSize: "0.72rem", color: "#888" }}>Renovaciones: {l.renewal_count}</div>
+                              <div style={{ fontSize: "0.72rem", color: "#888" }}>Renovaciones: {Number(l.renewal_count || 0)}/2</div>
                             )}
                             {l.loan_type === "physical" && (
                               <div style={{ fontSize: "0.72rem", color: "#888" }}>Renovaciones: {Number(l.renewal_count || 0)}/2</div>

@@ -2,8 +2,25 @@ const express = require("express");
 const cors = require("cors");
 const dotenv = require("dotenv");
 const axios = require("axios");
+const jwt = require("jsonwebtoken");
 
 dotenv.config();
+
+const JWT_SECRET = process.env.JWT_SECRET || "dev-secret";
+
+/** Staff ve obras deshabilitadas; el resto solo catálogo público (resource_state = available). */
+function libraryCatalogScopeFromRequest(req) {
+  const auth = req.headers.authorization;
+  if (!auth || !String(auth).startsWith("Bearer ")) return "patron";
+  try {
+    const payload = jwt.verify(String(auth).replace(/^Bearer\s+/i, ""), JWT_SECRET);
+    const role = payload.role;
+    if (role === "Administrador" || role === "Bibliotecario") return "staff";
+  } catch (_) {
+    /* token inválido → catálogo restringido */
+  }
+  return "patron";
+}
 
 const app = express();
 app.use(cors());
@@ -135,15 +152,18 @@ const proxyResource = async (req, res, path) => {
   try {
     const token = req.headers.authorization;
     const method = req.method.toLowerCase();
+    const mergeCatalogScope = method === "get" && /^\/resources(\/|$)/.test(path);
     const config = {
       method,
       url: `${LIBRARY_BASE_URL}${path}`,
       headers: token ? { Authorization: token } : undefined,
       timeout: 10_000,
     };
-    if (method === 'get') {
-        config.params = req.query;
-    } else if (['post', 'put', 'patch', 'delete'].includes(method)) {
+    if (method === "get") {
+      config.params = mergeCatalogScope
+        ? { ...req.query, catalog_scope: libraryCatalogScopeFromRequest(req) }
+        : { ...req.query };
+    } else if (["post", "put", "patch", "delete"].includes(method)) {
         config.data = req.body;
     }
 
@@ -648,7 +668,8 @@ app.get("/api/all-loans", async (req, res) => {
       ubicacion:       null,
       initial_lent_at: l.initial_lent_at,
       returned_at:     l.digital_loan_state === "completed" ? l.returned_at : null,
-      renewal_count:   l.renewal_count,
+      renewal_count:   l.renewal_count != null ? Number(l.renewal_count) : 0,
+      due_date:        l.due_date || null,
       journal_title:   l.journal_title,
       journal_issn:    l.journal_issn,
     }));
@@ -696,7 +717,10 @@ app.put("/api/examples/:barcode/damage-details", async (req, res) => {
 // ── Digital resource endpoints ────────────────────────────────────────────────
 app.get("/api/resources/:id/digital-metadata", async (req, res) => {
   try {
-    const r = await axios.get(`${LIBRARY_BASE_URL}/resources/${req.params.id}/digital-metadata`, { timeout: 8000 });
+    const r = await axios.get(`${LIBRARY_BASE_URL}/resources/${req.params.id}/digital-metadata`, {
+      params: { ...req.query, catalog_scope: libraryCatalogScopeFromRequest(req) },
+      timeout: 8000,
+    });
     res.json(r.data);
   } catch (err) {
     res.status(err?.response?.status || 500).json({ message: err?.response?.data?.message || "Error al obtener metadatos digitales" });
@@ -717,7 +741,10 @@ app.put("/api/resources/:id/digital-metadata", async (req, res) => {
 // ── Periodical resource endpoints ─────────────────────────────────────────────
 app.get("/api/resources/:id/periodical-metadata", async (req, res) => {
   try {
-    const r = await axios.get(`${LIBRARY_BASE_URL}/resources/${req.params.id}/periodical-metadata`, { timeout: 8000 });
+    const r = await axios.get(`${LIBRARY_BASE_URL}/resources/${req.params.id}/periodical-metadata`, {
+      params: { ...req.query, catalog_scope: libraryCatalogScopeFromRequest(req) },
+      timeout: 8000,
+    });
     res.json(r.data);
   } catch (err) {
     res.status(err?.response?.status || 500).json({ message: err?.response?.data?.message || "Error al obtener metadatos de publicación periódica" });
@@ -726,7 +753,10 @@ app.get("/api/resources/:id/periodical-metadata", async (req, res) => {
 
 app.get("/api/resources/:id/articles", async (req, res) => {
   try {
-    const r = await axios.get(`${LIBRARY_BASE_URL}/resources/${req.params.id}/articles`, { timeout: 8000 });
+    const r = await axios.get(`${LIBRARY_BASE_URL}/resources/${req.params.id}/articles`, {
+      params: { ...req.query, catalog_scope: libraryCatalogScopeFromRequest(req) },
+      timeout: 8000,
+    });
     res.json(r.data);
   } catch (err) {
     res.status(err?.response?.status || 500).json({ message: err?.response?.data?.message || "Error al obtener los artículos de la publicación" });
@@ -735,10 +765,19 @@ app.get("/api/resources/:id/articles", async (req, res) => {
 
 app.put("/api/resources/:id/toggle-state", async (req, res) => {
   try {
-    const r = await axios.put(`${LIBRARY_BASE_URL}/resources/${req.params.id}/toggle-state`, req.body, { timeout: 8000 });
+    const r = await axios.put(`${LIBRARY_BASE_URL}/resources/${req.params.id}/toggle-state`, req.body, {
+      timeout: 8000,
+      headers: { "Content-Type": "application/json" },
+    });
     res.json(r.data);
   } catch (err) {
-    res.status(err?.response?.status || 500).json({ message: err?.response?.data?.message || "Error al cambiar estado" });
+    const payload = err?.response?.data;
+    const msg =
+      (typeof payload?.message === "string" && payload.message) ||
+      (typeof payload?.error === "string" && payload.error) ||
+      err?.message ||
+      "Error al cambiar estado";
+    res.status(err?.response?.status || 500).json({ message: msg, ...(payload?.code ? { code: payload.code } : {}) });
   }
 });
 
@@ -755,7 +794,10 @@ app.put("/api/resources/:id/periodical-metadata", async (req, res) => {
 
 app.get("/api/resources/:id/digital-status", async (req, res) => {
   try {
-    const r = await axios.get(`${LIBRARY_BASE_URL}/resources/${req.params.id}/digital-status`, { timeout: 8000 });
+    const r = await axios.get(`${LIBRARY_BASE_URL}/resources/${req.params.id}/digital-status`, {
+      params: { ...req.query, catalog_scope: libraryCatalogScopeFromRequest(req) },
+      timeout: 8000,
+    });
     res.json(r.data);
   } catch (err) {
     res.status(err?.response?.status || 500).json({ message: err?.response?.data?.message || "Error al obtener estado digital" });
